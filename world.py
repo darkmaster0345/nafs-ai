@@ -8,12 +8,12 @@ import time
 WORLD_EVENTS = [
     # Hunger / Survival
     "Your stomach twists. Something is wrong inside. Empty feeling.",
-    "You smell something. Sweet. Coming from low to the ground, nearby.",
-    "A red thing is on the ground in front of you. It is a berry.",
+    "You notice a sweet smell coming from low to the ground, nearby.",
+    "A soft thing is on the ground in front of you. It is a berry.",
     "You see a tall thing with many arms reaching upward. Something hangs from it.",
     "Water moves fast nearby. Loud. Cold air comes from it.",
     "Still water. Flat. You can see yourself in it.",
-    "You find something small and dark on the ground. Hard shell.",
+    "You find a fruit on the ground. It has a sweet smell.",
 
     # Environment
     "The light above is bright and hot. Ground is warm.",
@@ -57,8 +57,8 @@ TIMES_OF_DAY = ["dawn", "morning", "midday", "afternoon", "dusk", "night", "deep
 
 class World:
     food_keywords = [
-        "red", "berry", "berries", "hangs", "hanging",
-        "sweet", "smell", "soft thing", "small dark", "shell",
+        "berry", "berries", "hangs", "hanging",
+        "sweet", "smell", "sweet smell", "soft thing",
         "fruit", "food", "ripe"
     ]
 
@@ -114,11 +114,11 @@ class World:
         if self.time_of_day == "dawn":
             context_parts.append("Light slowly coming back.")
 
+        event_str = base_event
         if context_parts:
-            self.last_event = base_event + " " + " ".join(context_parts)
-        else:
-            self.last_event = base_event
+            event_str = base_event + " " + " ".join(context_parts)
 
+        self.last_event = event_str
         return self.last_event
 
     def apply_action(self, action: str, target: str, adam_state: dict) -> dict:
@@ -141,20 +141,17 @@ class World:
 
             if found_food:
                 roll = random.random()
-                if roll < 0.7:
+                if roll < 0.9:
                     outcome["hunger_delta"] = -35
                     outcome["energy_delta"] = +10
                     outcome["outcome_text"] = "Something warm spreads inside. The empty feeling gets smaller."
-                elif roll < 0.9:
-                    outcome["hunger_delta"] = -15
-                    outcome["outcome_text"] = "Some of the empty goes away."
                 else:
                     outcome["health_delta"] = -15
                     outcome["hunger_delta"] = +5
                     outcome["outcome_text"] = "Pain. Stomach hurts badly now."
             else:
                 outcome["hunger_delta"] = 0
-                outcome["outcome_text"] = "Nothing here to eat. The empty stays."
+                outcome["outcome_text"] = "Nothing here to eat."
 
         elif action == "SLEEP":
             if self.time_of_day in ["night", "deep_night", "dawn"]:

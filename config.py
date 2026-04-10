@@ -6,7 +6,7 @@ load_dotenv()
 # ── Brain Configuration ───────────────────────────────────────────────────────
 BRAIN_CONFIG = {
     "provider":       "groq",
-    "thought_model":  "llama-3.3-70b-versatile",   # deep — for inner thoughts
+    "thought_model":  "llama-3.1-8b-instant",   # deep — for inner thoughts
     "action_model":   "llama-3.1-8b-instant",       # fast — for world actions
     "api_key":        os.getenv("GROQ_API_KEY", ""),
     "poll_interval":  10,    # seconds between simulation ticks
