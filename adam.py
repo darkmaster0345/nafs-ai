@@ -59,7 +59,7 @@ class Adam:
         if self.health <= 0:
             self.is_alive = False
 
-         def apply_outcome(self, outcome: dict):
+    def apply_outcome(self, outcome: dict):
         """Apply world outcome to Adam's state."""
         self.health = max(0, min(100, self.health + outcome.get("health_delta", 0)))
         self.hunger = max(0, min(100, self.hunger + outcome.get("hunger_delta", 0)))
@@ -106,7 +106,7 @@ class Adam:
     # ── Memory System ─────────────────────────────────────────────────────────
 
     def remember(self, tick: int, event: str, thought: str,
-                 action: str, emotion: str, outcome: str):
+        action: str, emotion: str, outcome: str):
         """Store a new memory."""
         memory = {
             "tick":    tick,
