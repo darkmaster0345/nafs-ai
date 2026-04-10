@@ -8,6 +8,7 @@ extends Node
 
 @onready var http_request: HTTPRequest = HTTPRequest.new()
 
+var _is_requesting: bool = false
 var event_queue: Array = []
 var adam_node: CharacterBody2D = null
 
@@ -31,9 +32,9 @@ func _on_poll_timer_timeout() -> void:
     _start_poll_timer()
 
 func send_update() -> void:
-    if http_request.get_http_client_status() != HTTPClient.STATUS_DISCONNECTED:
-        # Request still in progress, skip this tick to avoid overlapping
+    if _is_requesting:
         return
+    _is_requesting = true
 
     # We send this so Python knows where Adam is and what he's experiencing
     var state = {
@@ -55,6 +56,8 @@ func send_update() -> void:
         push_error("An error occurred in the HTTP request.")
 
 func _on_request_completed(_result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+    _is_requesting = false
+
     if response_code != 200:
         push_warning("Server returned non-200 code: %d" % response_code)
         return

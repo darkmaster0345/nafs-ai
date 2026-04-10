@@ -85,15 +85,13 @@ func _create_placeholder_sprite() -> void:
 
 func _on_interaction_area_entered(area: Area2D) -> void:
     # Notify NetworkController of collision
-    # Note: We use get_node("/root/NetworkController") if it's not an Autoload,
-    # but the prompt implies it's a global script.
-    var net = get_node_or_null("/root/NetworkController")
-    if net:
-        net.call("report_event", {"type": "collision", "name": area.name})
+    var nc = NetworkController
+    if nc:
+        nc.report_event({"type": "collision", "name": area.name})
 
 func _on_food_area_entered(area: Area2D) -> void:
     # Specific food detection
     if area.is_in_group("food"):
-        var net = get_node_or_null("/root/NetworkController")
-        if net:
-            net.call("report_event", {"type": "food_found", "name": area.name})
+        var nc = NetworkController
+        if nc:
+            nc.report_event({"type": "food_found", "name": area.name})
