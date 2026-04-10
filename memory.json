@@ -1,0 +1,47 @@
+{
+  "age_ticks": 0,
+  "vocabulary": [
+    "hot",
+    "cold",
+    "pain",
+    "good",
+    "bad",
+    "full",
+    "empty",
+    "tired",
+    "awake",
+    "big",
+    "small",
+    "near",
+    "far",
+    "here",
+    "there",
+    "wet",
+    "dry",
+    "loud",
+    "quiet",
+    "soft",
+    "hard",
+    "light",
+    "dark"
+  ],
+  "concepts_learned": {},
+  "fear_triggers": [],
+  "good_memories": [],
+  "long_term": [
+    {
+      "tick": 0,
+      "event": "A soft thing is on the ground in front of you. It is a berry. Light slowly coming back.",
+      "thought": "confused. nothing working.",
+      "action": "IDLE",
+      "emotion": "confused",
+      "outcome": "You stayed still. Time passed."
+    }
+  ],
+  "stats": {
+    "health": 100,
+    "hunger": 10,
+    "energy": 80,
+    "stress": 5
+  }
+}

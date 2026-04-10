@@ -1,0 +1,17 @@
+[gd_scene load_steps=3 format=3 uid="uid://mainworld"]
+
+[ext_resource type="PackedScene" uid="uid://dadamagent" path="res://Adam.tscn" id="1_adam_instance"]
+
+[node name="MainScene" type="Node2D"]
+
+[node name="NavigationRegion2D" type="NavigationRegion2D" parent="."]
+
+[node name="TileMap" type="TileMap" parent="NavigationRegion2D"]
+format = 2
+
+[node name="Adam" parent="." instance=ExtResource("1_adam_instance")]
+position = Vector2(2048, 2048)
+
+[node name="NetworkController" type="Node" parent="."]
+# This can also be an Autoload, but here it's in the scene for v1.0
+script = load("res://NetworkController.gd")
