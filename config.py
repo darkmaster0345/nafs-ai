@@ -32,12 +32,9 @@ STARTING_VOCABULARY = [
     "hot", "cold", "pain", "good", "bad",
     "full", "empty", "tired", "awake",
     "big", "small", "near", "far",
-    "light", "dark", "wet", "dry",
+    "here", "there", "wet", "dry",
     "loud", "quiet", "soft", "hard",
-    "go", "stop", "eat", "sleep",
-    "touch", "run", "hide",
-    "alone", "other", "safe", "danger",
-    "want", "not", "here", "there",
+    "light", "dark",
 ]
 
 # ── Forbidden Knowledge ───────────────────────────────────────────────────────

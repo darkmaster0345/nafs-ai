@@ -51,6 +51,10 @@ class Adam:
         if self.energy <= 10:
             self.stress = min(100, self.stress + 3)
 
+        # Stress recovery logic
+        if self.hunger < 40 and self.health > 70:
+            self.stress = max(0, self.stress - 3)
+
         # Natural death
         if self.health <= 0:
             self.is_alive = False
@@ -60,6 +64,11 @@ class Adam:
         self.health  = max(0, min(100, self.health + outcome.get("health_delta", 0)))
         self.hunger  = max(0, min(100, self.hunger + outcome.get("hunger_delta", 0)))
         self.energy  = max(0, min(100, self.energy + outcome.get("energy_delta", 0)))
+
+        # Sleep-based stress reduction
+        outcome_text = outcome.get("outcome_text", "").lower()
+        if "light again" in outcome_text or "rest" in outcome_text:
+             self.stress = max(0, self.stress - 20)
 
         if self.health <= 0:
             self.is_alive = False
@@ -71,9 +80,9 @@ class Adam:
         if self.hunger > 70:
             parts.append("Very strong empty feeling inside. Painful.")
         elif self.hunger > 40:
-            parts.append("Empty inside. Not good.")
+            parts.append("Empty inside. Twisting.")
         elif self.hunger < 15:
-            parts.append("Inside feels full. Good.")
+            parts.append("Inside feels full.")
 
         if self.energy < 20:
             parts.append("Body very heavy. Hard to move.")

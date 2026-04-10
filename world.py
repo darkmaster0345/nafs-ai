@@ -9,7 +9,7 @@ WORLD_EVENTS = [
     # Hunger / Survival
     "Your stomach twists. Something is wrong inside. Empty feeling.",
     "You smell something. Sweet. Coming from low to the ground, nearby.",
-    "A round soft thing is on the ground in front of you. It is red.",
+    "A red thing is on the ground in front of you. It is a berry.",
     "You see a tall thing with many arms reaching upward. Something hangs from it.",
     "Water moves fast nearby. Loud. Cold air comes from it.",
     "Still water. Flat. You can see yourself in it.",
@@ -44,12 +44,24 @@ WORLD_EVENTS = [
     "You are very tired. Eyes heavy.",
 ]
 
-WEATHER_STATES = ["clear", "cloudy", "raining", "cold_wind", "hot"]
+WEATHER_POOL = [
+    "clear", "clear", "clear", "clear",
+    "cloudy", "cloudy",
+    "raining",
+    "cold_wind",
+    "hot"
+]
 
 TIMES_OF_DAY = ["dawn", "morning", "midday", "afternoon", "dusk", "night", "deep_night"]
 
 
 class World:
+    food_keywords = [
+        "red", "berry", "berries", "hangs", "hanging",
+        "sweet", "smell", "soft thing", "small dark", "shell",
+        "fruit", "food", "ripe"
+    ]
+
     def __init__(self):
         self.tick         = 0
         self.day          = 1
@@ -57,9 +69,12 @@ class World:
         self.weather      = "clear"
         self.temperature  = 18   # celsius feeling
         self._time_index  = 0
+        self.weather_ticks = 0
+        self.last_event   = ""
 
     def tick_forward(self):
         self.tick += 1
+        self.weather_ticks += 1
 
         # Advance time of day
         self._time_index = (self._time_index + 1) % len(TIMES_OF_DAY)
@@ -68,9 +83,11 @@ class World:
         if self._time_index == 0:
             self.day += 1
 
-        # Random weather shift (10% chance per tick)
-        if random.random() < 0.1:
-            self.weather = random.choice(WEATHER_STATES)
+        # Random weather shift (Only if minimum 3 ticks per weather type)
+        if self.weather_ticks >= 3:
+            if random.random() < 0.1:
+                self.weather = random.choice(WEATHER_POOL)
+                self.weather_ticks = 0
 
         # Temperature follows time of day loosely
         temp_map = {
@@ -98,9 +115,11 @@ class World:
             context_parts.append("Light slowly coming back.")
 
         if context_parts:
-            return base_event + " " + " ".join(context_parts)
+            self.last_event = base_event + " " + " ".join(context_parts)
+        else:
+            self.last_event = base_event
 
-        return base_event
+        return self.last_event
 
     def apply_action(self, action: str, target: str, adam_state: dict) -> dict:
         """
@@ -117,18 +136,25 @@ class World:
         action = action.upper()
 
         if action == "EAT":
-            # Random outcome — he doesn't know if food is good yet
-            roll = random.random()
-            if roll > 0.7:
-                outcome["hunger_delta"]  = -30
-                outcome["energy_delta"]  = +10
-                outcome["outcome_text"]  = "Something warm spreads inside. The empty feeling gets smaller."
-            elif roll > 0.4:
-                outcome["hunger_delta"]  = -15
-                outcome["outcome_text"]  = "Some of the empty feeling goes away."
+            # Check if any keyword in food_keywords exists in the most recent world event text
+            found_food = any(keyword in self.last_event.lower() for keyword in self.food_keywords)
+
+            if found_food:
+                roll = random.random()
+                if roll < 0.7:
+                    outcome["hunger_delta"] = -35
+                    outcome["energy_delta"] = +10
+                    outcome["outcome_text"] = "Something warm spreads inside. The empty feeling gets smaller."
+                elif roll < 0.9:
+                    outcome["hunger_delta"] = -15
+                    outcome["outcome_text"] = "Some of the empty goes away."
+                else:
+                    outcome["health_delta"] = -15
+                    outcome["hunger_delta"] = +5
+                    outcome["outcome_text"] = "Pain. Stomach hurts badly now."
             else:
-                outcome["health_delta"]  = -10
-                outcome["outcome_text"]  = "Pain. Stomach hurts badly now. That was wrong."
+                outcome["hunger_delta"] = 0
+                outcome["outcome_text"] = "Nothing here to eat. The empty stays."
 
         elif action == "SLEEP":
             if self.time_of_day in ["night", "deep_night", "dawn"]:
@@ -142,12 +168,12 @@ class World:
         elif action == "DRINK":
             outcome["hunger_delta"]  = -10
             outcome["energy_delta"]  = +5
-            outcome["outcome_text"]  = "The wet feeling in mouth. Good."
+            outcome["outcome_text"]  = "The wet feeling in mouth."
 
         elif action == "HIDE":
             if self.weather in ["raining", "cold_wind"]:
                 outcome["health_delta"]  = +3
-                outcome["outcome_text"]  = "Protected from the wet and cold. Safer feeling."
+                outcome["outcome_text"]  = "The pushing cold stopped."
             else:
                 outcome["outcome_text"]  = "You wait. Still. Nothing happens."
 
