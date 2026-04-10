@@ -59,16 +59,16 @@ class Adam:
         if self.health <= 0:
             self.is_alive = False
 
-    def apply_outcome(self, outcome: dict):
+         def apply_outcome(self, outcome: dict):
         """Apply world outcome to Adam's state."""
-        self.health  = max(0, min(100, self.health + outcome.get("health_delta", 0)))
-        self.hunger  = max(0, min(100, self.hunger + outcome.get("hunger_delta", 0)))
-        self.energy  = max(0, min(100, self.energy + outcome.get("energy_delta", 0)))
+        self.health = max(0, min(100, self.health + outcome.get("health_delta", 0)))
+        self.hunger = max(0, min(100, self.hunger + outcome.get("hunger_delta", 0)))
+        self.energy = max(0, min(100, self.energy + outcome.get("energy_delta", 0)))
 
         # Sleep-based stress reduction
         outcome_text = outcome.get("outcome_text", "").lower()
         if "light again" in outcome_text or "rest" in outcome_text:
-             self.stress = max(0, self.stress - 20)
+            self.stress = max(0, self.stress - 20)
 
         if self.health <= 0:
             self.is_alive = False
