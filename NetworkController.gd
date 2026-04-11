@@ -53,6 +53,7 @@ func send_update() -> void:
 
     var error = http_request.request(server_url, headers, HTTPClient.METHOD_POST, json_query)
     if error != OK:
+        _is_requesting = false
         push_error("An error occurred in the HTTP request.")
 
 func _on_request_completed(_result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
