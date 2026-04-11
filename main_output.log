@@ -1,0 +1,4 @@
+
+[91m[Error] GROQ_API_KEY not found.[0m
+  Create a .env file with: GROQ_API_KEY=your_key_here
+  Get a free key at: https://console.groq.com
