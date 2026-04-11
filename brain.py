@@ -1,15 +1,55 @@
 import json
+import os
 import time
+from pathlib import Path
 from llama_cpp import Llama
 
-# Load model once at module level
-llm = Llama(
-    model_path="models/stablelm-zephyr-3b.Q4_K_M.gguf",
-    n_ctx=4096,
-    n_threads=6,
-    n_gpu_layers=0,  # CPU only, safe default
-    verbose=False,
-)
+# Module-level llm instance (initialized lazily)
+llm = None
+
+def get_llm():
+    """
+    Lazy initializer for the Llama model.
+    Reads model path from NAFS_MODEL_PATH environment variable.
+    Validates the path and constructs the Llama instance on first call.
+
+    Returns:
+        Llama: The initialized Llama model instance.
+
+    Raises:
+        ValueError: If NAFS_MODEL_PATH is not set or file doesn't exist.
+    """
+    global llm
+    if llm is None:
+        model_path = os.environ.get("NAFS_MODEL_PATH")
+        if not model_path:
+            raise ValueError(
+                "NAFS_MODEL_PATH environment variable is not set. "
+                "Please set it to the path of your GGUF model file."
+            )
+
+        model_file = Path(model_path)
+        if not model_file.exists():
+            raise ValueError(
+                f"Model file not found at: {model_path}\n"
+                f"Please ensure NAFS_MODEL_PATH points to a valid GGUF model file."
+            )
+
+        if not model_file.is_file():
+            raise ValueError(
+                f"NAFS_MODEL_PATH must point to a file, not a directory: {model_path}"
+            )
+
+        # Initialize with the same runtime args as before
+        llm = Llama(
+            model_path=model_path,
+            n_ctx=4096,
+            n_threads=6,
+            n_gpu_layers=0,  # CPU only, safe default
+            verbose=False,
+        )
+
+    return llm
 
 # ── System Prompt ─────────────────────────────────────────────────────────────
 NAFS_SYSTEM_PROMPT = """
@@ -78,13 +118,33 @@ def parse_response(raw: str) -> dict:
     if start != -1 and end > start:
         try:
             parsed = json.loads(raw[start:end])
-            # Ensure required fields exist
-            parsed.setdefault("thought", raw[:60])
-            parsed.setdefault("dialogue", "")
-            parsed.setdefault("action", "EXPLORE")
-            parsed.setdefault("target", "")
-            parsed.setdefault("emotion", "uncertain")
-            parsed["action"] = parsed["action"].upper()
+
+            # Ensure parsed is a dict; coerce non-dict to empty dict
+            if not isinstance(parsed, dict):
+                parsed = {}
+
+            # Normalize "action" field: ensure it's a string and uppercase
+            if not isinstance(parsed.get("action"), str):
+                parsed["action"] = "EXPLORE"
+            else:
+                parsed["action"] = parsed["action"].upper()
+
+            # Normalize "thought" field: ensure it's a string
+            if not isinstance(parsed.get("thought"), str):
+                parsed["thought"] = raw[:60] if raw else ""
+
+            # Normalize "dialogue" field: ensure it's a string
+            if not isinstance(parsed.get("dialogue"), str):
+                parsed["dialogue"] = ""
+
+            # Normalize "target" field: ensure it's a string
+            if not isinstance(parsed.get("target"), str):
+                parsed["target"] = ""
+
+            # Normalize "emotion" field: ensure it's a string
+            if not isinstance(parsed.get("emotion"), str):
+                parsed["emotion"] = "uncertain"
+
             return parsed
         except json.JSONDecodeError:
             pass
@@ -118,7 +178,8 @@ def ask_brain(adam, world_event, outcome_text=""):
     # StableLM-Zephyr exact chat template
     prompt = f"<|system|>\n{system}<|endoftext|>\n<|user|>\n{user}<|endoftext|>\n<|assistant|>\n"
 
-    output = llm(
+    model = get_llm()
+    output = model(
         prompt,
         max_tokens=200,
         temperature=0.9,

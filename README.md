@@ -183,13 +183,22 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Step 4 — API Key
-Get a free Groq API key at [console.groq.com](https://console.groq.com)
+### Step 4 — Environment Variables
+Configure the necessary environment variables:
 
 ```bash
-# Create .env file
-echo "GROQ_API_KEY=your_key_here" > .env
+# Create .env file with required variables
+cat > .env << EOF
+# Model path (required) - Path to your local GGUF model file
+NAFS_MODEL_PATH=models/stablelm-zephyr-3b.Q4_K_M.gguf
+
+# Groq API key (if using cloud-based brain instead of local model)
+# Get a free key at https://console.groq.com
+# GROQ_API_KEY=your_key_here
+EOF
 ```
+
+**Note:** The `NAFS_MODEL_PATH` environment variable must point to a valid GGUF model file for the local brain to work. Make sure the model file exists at the specified path before running the simulation.
 
 ### Step 5 — Run
 ```bash
