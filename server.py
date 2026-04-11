@@ -1,6 +1,8 @@
 import threading
 import time
 import json
+import logging
+import traceback
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from world import World
@@ -73,8 +75,9 @@ def brain_loop():
                     energy_drain=SIM_CONFIG["energy_drain"]
                 )
 
-        except Exception as e:
-            print(f"[Server] Brain Loop Error: {e}")
+        except Exception:
+            logging.exception("[Server] Brain Loop Error — full traceback:")
+            time.sleep(2)  # brief pause before retry
 
         # Poll interval from config
         time.sleep(BRAIN_CONFIG["poll_interval"])
@@ -90,6 +93,13 @@ def update():
     """
     global last_godot_state
     data = request.json
+
+    if not isinstance(data, dict):
+        return jsonify({"error": "Invalid JSON payload"}), 400
+
+    if "events" in data:
+        if not isinstance(data["events"], list):
+            return jsonify({"error": "events must be a list"}), 400
 
     with lock:
         # Save Godot state for context (though simulation is the source of truth)

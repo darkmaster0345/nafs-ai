@@ -1,16 +1,17 @@
 import json
 import time
-from groq import Groq
-from config import BRAIN_CONFIG
+from llama_cpp import Llama
 
-client = Groq(api_key=BRAIN_CONFIG["api_key"])
+# Load model once at module level
+llm = Llama(
+    model_path="models/stablelm-zephyr-3b.Q4_K_M.gguf",
+    n_ctx=4096,
+    n_threads=6,
+    n_gpu_layers=0,  # CPU only, safe default
+    verbose=False,
+)
 
 # ── System Prompt ─────────────────────────────────────────────────────────────
-# This is the soul of the experiment.
-# Adam is not told he is an AI.
-# Adam is not told this is a simulation.
-# Adam is given only sensation.
-
 NAFS_SYSTEM_PROMPT = """
 You are.
 
@@ -69,15 +70,68 @@ Respond ONLY in this exact JSON format. Nothing else:
 }
 """
 
+def parse_response(raw: str) -> dict:
+    # Try to extract JSON first
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
 
-def ask_brain(adam, world_event: str, outcome_text: str = "") -> dict:
-    """
-    Send Adam's current state to the LLM.
-    Returns parsed response dict.
-    """
+    if start != -1 and end > start:
+        try:
+            parsed = json.loads(raw[start:end])
+            # Ensure required fields exist
+            parsed.setdefault("thought", raw[:60])
+            parsed.setdefault("dialogue", "")
+            parsed.setdefault("action", "EXPLORE")
+            parsed.setdefault("target", "")
+            parsed.setdefault("emotion", "uncertain")
+            parsed["action"] = parsed["action"].upper()
+            return parsed
+        except json.JSONDecodeError:
+            pass
 
-    # Build the user message
-    user_message = f"""
+    # Fallback: parse intent from narrative text
+    action = "EXPLORE"
+    raw_lower = raw.lower()
+    if any(w in raw_lower for w in ["hide","shelter","cave","dark opening"]):
+        action = "HIDE"
+    elif any(w in raw_lower for w in ["eat","food","berry","hungry","smell"]):
+        action = "EAT"
+    elif any(w in raw_lower for w in ["sleep","tired","rest","heavy"]):
+        action = "SLEEP"
+    elif any(w in raw_lower for w in ["drink","water","thirst"]):
+        action = "DRINK"
+    elif any(w in raw_lower for w in ["move","go","walk","run"]):
+        action = "MOVE"
+
+    return {
+        "thought": raw[:80] if raw else "...",
+        "dialogue": "",
+        "action": action,
+        "target": "",
+        "emotion": "uncertain",
+    }
+
+def ask_brain(adam, world_event, outcome_text=""):
+    system = NAFS_SYSTEM_PROMPT
+    user = _build_user_message(adam, world_event, outcome_text)
+
+    # StableLM-Zephyr exact chat template
+    prompt = f"<|system|>\n{system}<|endoftext|>\n<|user|>\n{user}<|endoftext|>\n<|assistant|>\n"
+
+    output = llm(
+        prompt,
+        max_tokens=200,
+        temperature=0.9,
+        repeat_penalty=1.1,
+        stop=["<|endoftext|>", "<|user|>"],
+    )
+
+    raw = output["choices"][0]["text"].strip()
+    return parse_response(raw)
+
+def _build_user_message(adam, world_event: str, outcome_text: str = "") -> str:
+    """Build the user message context."""
+    return f"""
 What is happening around you:
 {world_event}
 
@@ -95,73 +149,6 @@ Your recent past:
 
 What do you think, feel, and do right now?
 """
-
-    # Try thought model first, fall back to action model
-    for model in [BRAIN_CONFIG["thought_model"], BRAIN_CONFIG["action_model"]]:
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": NAFS_SYSTEM_PROMPT},
-                    {"role": "user",   "content": user_message},
-                ],
-                max_tokens=BRAIN_CONFIG["max_tokens"],
-                temperature=BRAIN_CONFIG["temperature"],
-            )
-
-            raw = response.choices[0].message.content.strip()
-            parsed = _parse_response(raw)
-
-            if parsed:
-                return parsed
-
-        except Exception as e:
-            print(f"[Brain] Model {model} failed: {e}")
-            time.sleep(2)
-
-    # Fallback if everything fails
-    return {
-        "thought":  "confused. nothing working.",
-        "dialogue": "",
-        "action":   "IDLE",
-        "target":   "",
-        "emotion":  "confused",
-    }
-
-
-def _parse_response(raw: str) -> dict | None:
-    """Parse JSON from LLM response. Handles messy output."""
-    # Strip markdown fences if present
-    raw = raw.replace("```json", "").replace("```", "").strip()
-
-    # Find first { and last }
-    start = raw.find("{")
-    end   = raw.rfind("}") + 1
-
-    if start == -1 or end == 0:
-        return None
-
-    try:
-        parsed = json.loads(raw[start:end])
-
-        # Validate required fields
-        required = ["thought", "dialogue", "action", "emotion"]
-        for field in required:
-            if field not in parsed:
-                parsed[field] = "?"
-
-        # Normalize action to uppercase
-        parsed["action"] = parsed.get("action", "IDLE").upper()
-
-        # Ensure target exists
-        if "target" not in parsed:
-            parsed["target"] = ""
-
-        return parsed
-
-    except json.JSONDecodeError:
-        return None
-
 
 def _build_fear_context(adam) -> str:
     """Inject relevant fear/pleasure context."""
