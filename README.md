@@ -183,13 +183,16 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Step 4 — API Key
-Get a free Groq API key at [console.groq.com](https://console.groq.com)
+### Step 4 — Configuration
+Create a `.env` file from the example:
 
 ```bash
-# Create .env file
-echo "GROQ_API_KEY=your_key_here" > .env
+cp .env.example .env
 ```
+
+Edit `.env` to set your model path:
+- `NAFS_MODEL_PATH`: Path to your GGUF model (default: `models/stablelm-zephyr-3b.Q4_K_M.gguf`)
+- `GROQ_API_KEY`: Your Groq API key (if applicable)
 
 ### Step 5 — Run
 ```bash
