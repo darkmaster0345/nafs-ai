@@ -1,5 +1,5 @@
 {
-  "age_ticks": 0,
+  "age_ticks": 15,
   "vocabulary": [
     "hot",
     "cold",
@@ -36,12 +36,140 @@
       "action": "IDLE",
       "emotion": "confused",
       "outcome": "You stayed still. Time passed."
+    },
+    {
+      "tick": 0,
+      "event": "You find a dark opening in the rock wall. Cool air comes out of it. Light slowly coming back.",
+      "thought": "Eyes heavy. World is gone. Need to stop.",
+      "action": "SLEEP",
+      "emotion": "tired",
+      "outcome": "You stayed still. Time passed."
+    },
+    {
+      "tick": 1,
+      "event": "You are lying down. Ground is hard but you are still.",
+      "thought": "Everything is new. Move feet. See more.",
+      "action": "EXPLORE",
+      "emotion": "confused",
+      "outcome": "Short rest. Slightly better."
+    },
+    {
+      "tick": 2,
+      "event": "A loud crack sound from above. Very bright light. Then loud boom.",
+      "thought": "Everything is new. Move feet. See more.",
+      "action": "EXPLORE",
+      "emotion": "confused",
+      "outcome": "You moved. New ground under feet. Nothing different yet."
+    },
+    {
+      "tick": 3,
+      "event": "The light is fading. Air getting colder.",
+      "thought": "Body shaking. Sky water cold. Find dry place.",
+      "action": "HIDE",
+      "emotion": "uncomfortable",
+      "outcome": "You moved. New ground under feet. Nothing different yet."
+    },
+    {
+      "tick": 4,
+      "event": "No light. Cannot see. Sounds in the dark.",
+      "thought": "Eyes heavy. World is gone. Need to stop.",
+      "action": "SLEEP",
+      "emotion": "tired",
+      "outcome": "You wait. Still. Nothing happens."
+    },
+    {
+      "tick": 5,
+      "event": "The ground here is softer. Easier to walk. Cold air pushes hard. Cannot see much. Dark.",
+      "thought": "Eyes heavy. World is gone. Need to stop.",
+      "action": "SLEEP",
+      "emotion": "tired",
+      "outcome": "Darkness. Then light again. Body feels less heavy."
+    },
+    {
+      "tick": 6,
+      "event": "Water falls from above. Cold. Everything getting wet. Cold air pushes hard. Cannot see much. Dark.",
+      "thought": "Wet. Cool. Want to feel in mouth.",
+      "action": "DRINK",
+      "emotion": "relief",
+      "outcome": "Darkness. Then light again. Body feels less heavy."
+    },
+    {
+      "tick": 7,
+      "event": "Water falls from above. Cold. Everything getting wet. Cold air pushes hard. Light slowly coming back.",
+      "thought": "Wet. Cool. Want to feel in mouth.",
+      "action": "DRINK",
+      "emotion": "relief",
+      "outcome": "The wet feeling in mouth."
+    },
+    {
+      "tick": 8,
+      "event": "You notice a sweet smell coming from low to the ground, nearby. Cold air pushes hard.",
+      "thought": "Smell good. Hunger hurts. Want to put in mouth.",
+      "action": "EAT",
+      "emotion": "curious",
+      "outcome": "The wet feeling in mouth."
+    },
+    {
+      "tick": 9,
+      "event": "Something large and dark is watching you from far away. It has not moved. Cold air pushes hard.",
+      "thought": "Eyes heavy. World is gone. Need to stop.",
+      "action": "SLEEP",
+      "emotion": "tired",
+      "outcome": "Nothing here to eat."
+    },
+    {
+      "tick": 10,
+      "event": "You see a tall thing with many arms reaching upward. Something hangs from it. Cold air pushes hard.",
+      "thought": "Body shaking. Sky water cold. Find dry place.",
+      "action": "HIDE",
+      "emotion": "uncomfortable",
+      "outcome": "Short rest. Slightly better."
+    },
+    {
+      "tick": 11,
+      "event": "The light is fading. Air getting colder. Cold air pushes hard.",
+      "thought": "Body shaking. Sky water cold. Find dry place.",
+      "action": "HIDE",
+      "emotion": "uncomfortable",
+      "outcome": "The pushing cold stopped."
+    },
+    {
+      "tick": 12,
+      "event": "Something moves in the tall grass. You cannot see what. Cannot see much. Dark.",
+      "thought": "Eyes heavy. World is gone. Need to stop.",
+      "action": "SLEEP",
+      "emotion": "tired",
+      "outcome": "You wait. Still. Nothing happens."
+    },
+    {
+      "tick": 13,
+      "event": "The ground here is softer. Easier to walk. Cannot see much. Dark.",
+      "thought": "Eyes heavy. World is gone. Need to stop.",
+      "action": "SLEEP",
+      "emotion": "tired",
+      "outcome": "Darkness. Then light again. Body feels less heavy."
+    },
+    {
+      "tick": 14,
+      "event": "Smoke smell from far away. Orange glow in the distance. Light slowly coming back.",
+      "thought": "Smell good. Hunger hurts. Want to put in mouth.",
+      "action": "EAT",
+      "emotion": "curious",
+      "outcome": "Darkness. Then light again. Body feels less heavy."
+    },
+    {
+      "tick": 15,
+      "event": "Something moves in the tall grass. You cannot see what.",
+      "thought": "Everything is new. Move feet. See more.",
+      "action": "EXPLORE",
+      "emotion": "confused",
+      "outcome": "Nothing here to eat."
     }
   ],
   "stats": {
     "health": 100,
-    "hunger": 10,
-    "energy": 80,
-    "stress": 5
+    "hunger": 20,
+    "energy": 99,
+    "stress": 0
   }
 }

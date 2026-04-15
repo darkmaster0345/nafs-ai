@@ -1,6 +1,7 @@
-[gd_scene load_steps=3 format=3 uid="uid://mainworld"]
+[gd_scene load_steps=4 format=3 uid="uid://mainworld"]
 
 [ext_resource type="PackedScene" uid="uid://dadamagent" path="res://Adam.tscn" id="1_adam_instance"]
+[ext_resource type="Script" path="res://HUD.gd" id="2_hud_script"]
 
 [node name="MainScene" type="Node2D"]
 
@@ -13,5 +14,160 @@ format = 2
 position = Vector2(2048, 2048)
 
 [node name="NetworkController" type="Node" parent="."]
-# This can also be an Autoload, but here it's in the scene for v1.0
 script = load("res://NetworkController.gd")
+
+[node name="HUD" type="CanvasLayer" parent="." groups=["hud"]]
+script = ExtResource("2_hud_script")
+
+[node name="StatsContainer" type="VBoxContainer" parent="HUD"]
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 220.0
+offset_bottom = 120.0
+
+[node name="Health" type="HBoxContainer" parent="HUD/StatsContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HUD/StatsContainer/Health"]
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+text = "Health"
+
+[node name="ProgressBar" type="ProgressBar" parent="HUD/StatsContainer/Health"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+size_flags_vertical = 4
+value = 100.0
+
+[node name="Hunger" type="HBoxContainer" parent="HUD/StatsContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HUD/StatsContainer/Hunger"]
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+text = "Hunger"
+
+[node name="ProgressBar" type="ProgressBar" parent="HUD/StatsContainer/Hunger"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="Energy" type="HBoxContainer" parent="HUD/StatsContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HUD/StatsContainer/Energy"]
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+text = "Energy"
+
+[node name="ProgressBar" type="ProgressBar" parent="HUD/StatsContainer/Energy"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+size_flags_vertical = 4
+value = 100.0
+
+[node name="Stress" type="HBoxContainer" parent="HUD/StatsContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HUD/StatsContainer/Stress"]
+custom_minimum_size = Vector2(60, 0)
+layout_mode = 2
+text = "Stress"
+
+[node name="ProgressBar" type="ProgressBar" parent="HUD/StatsContainer/Stress"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="ThoughtPanel" type="PanelContainer" parent="HUD"]
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -300.0
+offset_top = -120.0
+offset_right = 300.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="HUD/ThoughtPanel"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="HUD/ThoughtPanel/VBoxContainer"]
+layout_mode = 2
+text = "Thought"
+horizontal_alignment = 1
+
+[node name="ThoughtLabel" type="Label" parent="HUD/ThoughtPanel/VBoxContainer"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "..."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="DialoguePanel" type="PanelContainer" parent="HUD"]
+visible = false
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -150.0
+offset_right = 200.0
+offset_bottom = -50.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="HUD/DialoguePanel"]
+layout_mode = 2
+
+[node name="DialogueLabel" type="Label" parent="HUD/DialoguePanel/VBoxContainer"]
+layout_mode = 2
+text = "..."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="StatusContainer" type="VBoxContainer" parent="HUD"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -220.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = 100.0
+grow_horizontal = 0
+
+[node name="Emotion" type="HBoxContainer" parent="HUD/StatusContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HUD/StatusContainer/Emotion"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "Emotion:"
+
+[node name="ValueLabel" type="Label" parent="HUD/StatusContainer/Emotion"]
+layout_mode = 2
+text = "Neutral"
+
+[node name="World" type="HBoxContainer" parent="HUD/StatusContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="HUD/StatusContainer/World"]
+custom_minimum_size = Vector2(80, 0)
+layout_mode = 2
+text = "World:"
+
+[node name="ValueLabel" type="Label" parent="HUD/StatusContainer/World"]
+layout_mode = 2
+text = "..."
+
+[node name="ThinkingIndicator" type="ColorRect" parent="HUD"]
+visible = false
+offset_left = 20.0
+offset_top = 130.0
+offset_right = 40.0
+offset_bottom = 150.0
+color = Color(1, 1, 0, 1)
