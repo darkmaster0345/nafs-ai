@@ -2,6 +2,7 @@ import os
 import re
 import json
 import time
+import random
 from llama_cpp import Llama
 
 # Global model instance
@@ -14,17 +15,22 @@ def get_llm():
 
     model_path = os.environ.get("NAFS_MODEL_PATH", "models/stablelm-zephyr-3b.Q4_K_M.gguf")
     if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model not found at {model_path}. Please set NAFS_MODEL_PATH environment variable.")
+        print(f"[Brain] WARNING: Model not found at {model_path}. Falling back to MOCK MODE.")
+        return None
 
-    print(f"[Brain] Initializing Llama model from {model_path}...")
-    _llm = Llama(
-        model_path=model_path,
-        n_ctx=4096,
-        n_threads=6,
-        n_gpu_layers=32,
-        verbose=False,
-    )
-    return _llm
+    try:
+        print(f"[Brain] Initializing Llama model from {model_path}...")
+        _llm = Llama(
+            model_path=model_path,
+            n_ctx=4096,
+            n_threads=6,
+            n_gpu_layers=32,
+            verbose=False,
+        )
+        return _llm
+    except Exception as e:
+        print(f"[Brain] ERROR initializing model: {e}. Falling back to MOCK MODE.")
+        return None
 
 # ── System Prompt ─────────────────────────────────────────────────────────────
 NAFS_SYSTEM_PROMPT = "{\"thought\":\"cold. hurt.\",\"action\":\"EXPLORE\",\"emotion\":\"confused\"}"
@@ -73,23 +79,67 @@ def parse_response(raw: str) -> dict:
 
     return parsed
 
+def ask_brain_mock(adam, world_event, outcome_text):
+    """Fallback generator for when no LLM is available."""
+    event_lower = world_event.lower()
+
+    # Simple heuristic-based responses
+    if any(k in event_lower for k in ["smell", "berry", "fruit", "food"]):
+        thought = "Smell good. Hunger hurts. Want to put in mouth."
+        action = "EAT"
+        emotion = "curious"
+    elif any(k in event_lower for k in ["water", "river", "wet", "thirst"]):
+        thought = "Wet. Cool. Want to feel in mouth."
+        action = "DRINK"
+        emotion = "relief"
+    elif any(k in event_lower for k in ["dark", "night", "tired", "heavy"]):
+        thought = "Eyes heavy. World is gone. Need to stop."
+        action = "SLEEP"
+        emotion = "tired"
+    elif any(k in event_lower for k in ["cold", "rain", "wind"]):
+        thought = "Body shaking. Sky water cold. Find dry place."
+        action = "HIDE"
+        emotion = "uncomfortable"
+    elif any(k in event_lower for k in ["pain", "sharp", "hurt", "bite"]):
+        thought = "Aaaah! Pain! Bad thing happened. Go away fast."
+        action = "MOVE"
+        emotion = "fear"
+    else:
+        thought = "Everything is new. Move feet. See more."
+        action = "EXPLORE"
+        emotion = "confused"
+
+    return {
+        "thought": thought,
+        "dialogue": "",
+        "action": action,
+        "target": "",
+        "emotion": emotion
+    }
+
 def ask_brain(adam, world_event, outcome_text=""):
-    system = NAFS_SYSTEM_PROMPT
+    llm = get_llm()
+    if llm is None:
+        return ask_brain_mock(adam, world_event, outcome_text)
+
     user = _build_user_message(adam, world_event, outcome_text)
 
     # StableLM-Zephyr exact chat template
     prompt = f"{NAFS_SYSTEM_PROMPT}\n<|user|>\nContinue this JSON for a creature feeling: {user}<|endoftext|>\n<|assistant|>\n"
 
-    output = get_llm()(
-        prompt,
-        max_tokens=200,
-        temperature=0.9,
-        repeat_penalty=1.1,
-        stop=["<|endoftext|>", "<|user|>"],
-    )
-
-    raw = output["choices"][0]["text"].strip()
-    return parse_response(raw)
+    try:
+        output = llm(
+            prompt,
+            max_tokens=200,
+            temperature=0.9,
+            repeat_penalty=1.1,
+            stop=["<|endoftext|>", "<|user|>"],
+        )
+        raw = output["choices"][0]["text"].strip()
+        return parse_response(raw)
+    except Exception as e:
+        print(f"[Brain] Error during LLM inference: {e}. Falling back to MOCK MODE.")
+        return ask_brain_mock(adam, world_event, outcome_text)
 
 def _build_user_message(adam, world_event: str, outcome_text: str = "") -> str:
     """Build the user message context."""

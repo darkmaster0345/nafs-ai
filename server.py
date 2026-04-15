@@ -55,7 +55,8 @@ def brain_loop():
                         "action": response.get("action", "IDLE"),
                         "target": response.get("target", ""),
                         "thought": response.get("thought", ""),
-                        "emotion": response.get("emotion", "uncertain")
+                        "emotion": response.get("emotion", "uncertain"),
+                        "dialogue": response.get("dialogue", "")
                     }
 
                     # Remember
@@ -117,6 +118,7 @@ def update():
         return jsonify({
             "status": "ok",
             "command": current_command,
+            "world_status": world.status_line(),
             "stats": {
                 "health": adam.health,
                 "hunger": adam.hunger,
