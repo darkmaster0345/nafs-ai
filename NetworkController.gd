@@ -86,6 +86,9 @@ func _on_request_completed(_result: int, response_code: int, _headers: PackedStr
         if response.has("world_status") and hud_node:
             hud_node.call("update_world_info", response["world_status"])
 
+        if response.has("history") and hud_node:
+            hud_node.call("update_history", response["history"])
+
         if response.has("command"):
             _apply_command(response["command"])
     else:

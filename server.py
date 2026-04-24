@@ -119,6 +119,7 @@ def update():
             "status": "ok",
             "command": current_command,
             "world_status": world.status_line(),
+            "history": adam.short_term,
             "stats": {
                 "health": adam.health,
                 "hunger": adam.hunger,

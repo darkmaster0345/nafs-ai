@@ -1,5 +1,5 @@
 {
-  "age_ticks": 15,
+  "age_ticks": 20,
   "vocabulary": [
     "hot",
     "cold",
@@ -26,7 +26,9 @@
     "dark"
   ],
   "concepts_learned": {},
-  "fear_triggers": [],
+  "fear_triggers": [
+    "Your stomach twists. Something is wrong inside. Empty feelin"
+  ],
   "good_memories": [],
   "long_term": [
     {
@@ -164,12 +166,60 @@
       "action": "EXPLORE",
       "emotion": "confused",
       "outcome": "Nothing here to eat."
+    },
+    {
+      "tick": 1,
+      "event": "Something moves in the tall grass. You cannot see what.",
+      "thought": "Everything is new. Move feet. See more.",
+      "action": "EXPLORE",
+      "emotion": "confused",
+      "outcome": "You stayed still. Time passed."
+    },
+    {
+      "tick": 2,
+      "event": "Your stomach twists. Something is wrong inside. Empty feeling.",
+      "thought": "Everything is new. Move feet. See more.",
+      "action": "EXPLORE",
+      "emotion": "confused",
+      "outcome": "Your stomach twists. Something is wrong inside. Empty feeling."
+    },
+    {
+      "tick": 17,
+      "event": "You see a tall thing with many arms reaching upward. Something hangs from it. Light slowly coming back.",
+      "thought": "Everything is new. Move feet. See more.",
+      "action": "EXPLORE",
+      "emotion": "confused",
+      "outcome": "You stayed still. Time passed."
+    },
+    {
+      "tick": 18,
+      "event": "You find a dry place under a large flat rock. Protected from wind.",
+      "thought": "Body shaking. Sky water cold. Find dry place.",
+      "action": "HIDE",
+      "emotion": "uncomfortable",
+      "outcome": "You moved. New ground under feet. Nothing different yet."
+    },
+    {
+      "tick": 19,
+      "event": "Something moves in the tall grass. You cannot see what.",
+      "thought": "Everything is new. Move feet. See more.",
+      "action": "EXPLORE",
+      "emotion": "confused",
+      "outcome": "You wait. Still. Nothing happens."
+    },
+    {
+      "tick": 20,
+      "event": "The ground here is softer. Easier to walk.",
+      "thought": "Everything is new. Move feet. See more.",
+      "action": "EXPLORE",
+      "emotion": "confused",
+      "outcome": "Strong air pushing against you. Hard to stand."
     }
   ],
   "stats": {
     "health": 100,
-    "hunger": 20,
-    "energy": 99,
+    "hunger": 30,
+    "energy": 94,
     "stress": 0
   }
 }

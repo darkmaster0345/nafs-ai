@@ -13,6 +13,7 @@ extends CharacterBody2D
 
 var target_position: Vector2 = Vector2.ZERO
 var current_action: String = "IDLE"
+var action_label: Label
 
 func _ready() -> void:
     # Anti-Failure: Check for assets, create placeholder if missing
@@ -31,7 +32,20 @@ func _ready() -> void:
     interaction_area.area_entered.connect(_on_interaction_area_entered)
     food_area.area_entered.connect(_on_food_area_entered)
 
+    # Create Floating Action Label
+    action_label = Label.new()
+    action_label.text = "IDLE"
+    action_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    action_label.add_theme_font_size_override("font_size", 14)
+    action_label.position = Vector2(-50, -60)
+    action_label.custom_minimum_size = Vector2(100, 20)
+    add_child(action_label)
+
 func _physics_process(delta: float) -> void:
+    # Update label rotation so it stays upright
+    action_label.global_rotation = 0
+    action_label.text = current_action
+
     if current_action == "IDLE":
         velocity = Vector2.ZERO
         move_and_slide()
