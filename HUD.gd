@@ -13,6 +13,7 @@ extends CanvasLayer
 @onready var emotion_label: Label = $StatusContainer/Emotion/ValueLabel
 @onready var world_label: Label = $StatusContainer/World/ValueLabel
 @onready var thinking_indicator: Control = $ThinkingIndicator
+@onready var history_container: VBoxContainer = $HistoryLog/HistoryContainer
 
 func _ready() -> void:
     # Reset UI
@@ -20,6 +21,12 @@ func _ready() -> void:
     update_thought("Waking up...", "neutral")
     update_world_info("Day 1 - Dawn")
     set_thinking(false)
+
+    # Initial bar colors
+    health_bar.modulate = Color.GREEN
+    hunger_bar.modulate = Color.ORANGE
+    energy_bar.modulate = Color.CYAN
+    stress_bar.modulate = Color.TOMATO
 
 func update_stats(stats: Dictionary) -> void:
     if stats.has("health"): health_bar.value = stats["health"]
@@ -30,10 +37,6 @@ func update_stats(stats: Dictionary) -> void:
 func update_thought(thought: String, emotion: String) -> void:
     thought_label.text = thought
     emotion_label.text = emotion.capitalize()
-
-    # Optional: Change thought box color based on emotion?
-    # var panel = $ThoughtPanel
-    # ...
 
 func update_dialogue(dialogue: String) -> void:
     if dialogue.strip_edges() == "":
@@ -47,3 +50,21 @@ func update_world_info(info: String) -> void:
 
 func set_thinking(is_thinking: bool) -> void:
     thinking_indicator.visible = is_thinking
+
+func update_history(history: Array) -> void:
+    if not history_container: return
+
+    # Clear existing
+    for child in history_container.get_children():
+        child.queue_free()
+
+    # Add new entries
+    for entry in history:
+        var lbl = Label.new()
+        lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+        var tick = entry.get("tick", 0)
+        var action = entry.get("action", "IDLE")
+        var outcome = entry.get("outcome", "")
+        lbl.text = "[Tick %d] %s: %s" % [tick, action, outcome]
+        lbl.add_theme_font_size_override("font_size", 12)
+        history_container.add_child(lbl)
