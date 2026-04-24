@@ -93,7 +93,6 @@ def check_api_key():
 # ── Main Simulation Loop ──────────────────────────────────────────────────────
 
 def run():
-    check_api_key()
     clear()
     print_header()
 
