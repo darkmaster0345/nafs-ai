@@ -17,7 +17,7 @@ extends CanvasLayer
 
 func _ready() -> void:
     # Reset UI
-    update_stats({"health": 100, "hunger": 0, "energy": 100, "stress": 0})
+    update_stats({"health": 100.0, "hunger": 0.0, "energy": 100.0, "stress": 0.0})
     update_thought("Waking up...", "neutral")
     update_world_info("Day 1 - Dawn")
     set_thinking(false)

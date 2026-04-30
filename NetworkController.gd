@@ -44,8 +44,8 @@ func send_update() -> void:
     # We send this so Python knows where Adam is and what he's experiencing
     var state = {
         "position": {
-            "x": adam_node.global_position.x if adam_node else 0,
-            "y": adam_node.global_position.y if adam_node else 0
+            "x": adam_node.global_position.x if adam_node else 0.0,
+            "y": adam_node.global_position.y if adam_node else 0.0
         },
         "events": event_queue.duplicate()
     }

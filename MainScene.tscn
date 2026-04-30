@@ -1,7 +1,8 @@
-[gd_scene load_steps=4 format=3 uid="uid://mainworld"]
+[gd_scene load_steps=5 format=3 uid="uid://mainworld"]
 
 [ext_resource type="PackedScene" uid="uid://dadamagent" path="res://Adam.tscn" id="1_adam_instance"]
 [ext_resource type="Script" path="res://HUD.gd" id="2_hud_script"]
+[ext_resource type="Script" path="res://NetworkController.gd" id="3_network_script"]
 
 [node name="MainScene" type="Node2D"]
 
@@ -11,10 +12,10 @@
 format = 2
 
 [node name="Adam" parent="." instance=ExtResource("1_adam_instance")]
-position = Vector2(2048, 2048)
+position = Vector2(2048.0, 2048.0)
 
 [node name="NetworkController" type="Node" parent="."]
-script = load("res://NetworkController.gd")
+script = ExtResource("3_network_script")
 
 [node name="HUD" type="CanvasLayer" parent="." groups=["hud"]]
 script = ExtResource("2_hud_script")
@@ -29,12 +30,12 @@ offset_bottom = 120.0
 layout_mode = 2
 
 [node name="Label" type="Label" parent="HUD/StatsContainer/Health"]
-custom_minimum_size = Vector2(60, 0)
+custom_minimum_size = Vector2(60.0, 0.0)
 layout_mode = 2
 text = "Health"
 
 [node name="ProgressBar" type="ProgressBar" parent="HUD/StatsContainer/Health"]
-custom_minimum_size = Vector2(120, 0)
+custom_minimum_size = Vector2(120.0, 0.0)
 layout_mode = 2
 size_flags_vertical = 4
 value = 100.0
@@ -43,12 +44,12 @@ value = 100.0
 layout_mode = 2
 
 [node name="Label" type="Label" parent="HUD/StatsContainer/Hunger"]
-custom_minimum_size = Vector2(60, 0)
+custom_minimum_size = Vector2(60.0, 0.0)
 layout_mode = 2
 text = "Hunger"
 
 [node name="ProgressBar" type="ProgressBar" parent="HUD/StatsContainer/Hunger"]
-custom_minimum_size = Vector2(120, 0)
+custom_minimum_size = Vector2(120.0, 0.0)
 layout_mode = 2
 size_flags_vertical = 4
 
@@ -56,12 +57,12 @@ size_flags_vertical = 4
 layout_mode = 2
 
 [node name="Label" type="Label" parent="HUD/StatsContainer/Energy"]
-custom_minimum_size = Vector2(60, 0)
+custom_minimum_size = Vector2(60.0, 0.0)
 layout_mode = 2
 text = "Energy"
 
 [node name="ProgressBar" type="ProgressBar" parent="HUD/StatsContainer/Energy"]
-custom_minimum_size = Vector2(120, 0)
+custom_minimum_size = Vector2(120.0, 0.0)
 layout_mode = 2
 size_flags_vertical = 4
 value = 100.0
@@ -70,12 +71,12 @@ value = 100.0
 layout_mode = 2
 
 [node name="Label" type="Label" parent="HUD/StatsContainer/Stress"]
-custom_minimum_size = Vector2(60, 0)
+custom_minimum_size = Vector2(60.0, 0.0)
 layout_mode = 2
 text = "Stress"
 
 [node name="ProgressBar" type="ProgressBar" parent="HUD/StatsContainer/Stress"]
-custom_minimum_size = Vector2(120, 0)
+custom_minimum_size = Vector2(120.0, 0.0)
 layout_mode = 2
 size_flags_vertical = 4
 
@@ -101,7 +102,7 @@ text = "Thought"
 horizontal_alignment = 1
 
 [node name="ThoughtLabel" type="Label" parent="HUD/ThoughtPanel/VBoxContainer"]
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0.0, 40.0)
 layout_mode = 2
 text = "..."
 horizontal_alignment = 1
@@ -144,7 +145,7 @@ grow_horizontal = 0
 layout_mode = 2
 
 [node name="Label" type="Label" parent="HUD/StatusContainer/Emotion"]
-custom_minimum_size = Vector2(80, 0)
+custom_minimum_size = Vector2(80.0, 0.0)
 layout_mode = 2
 text = "Emotion:"
 
@@ -156,7 +157,7 @@ text = "Neutral"
 layout_mode = 2
 
 [node name="Label" type="Label" parent="HUD/StatusContainer/World"]
-custom_minimum_size = Vector2(80, 0)
+custom_minimum_size = Vector2(80.0, 0.0)
 layout_mode = 2
 text = "World:"
 
