@@ -214,6 +214,14 @@
       "action": "EXPLORE",
       "emotion": "confused",
       "outcome": "Strong air pushing against you. Hard to stand."
+    },
+    {
+      "tick": 20,
+      "event": "Your stomach twists. Something is wrong inside. Empty feeling. Light slowly coming back.",
+      "thought": "Everything is new. Move feet. See more.",
+      "action": "EXPLORE",
+      "emotion": "confused",
+      "outcome": "The empty feeling persists. Hunger grows stronger."
     }
   ],
   "stats": {

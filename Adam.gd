@@ -37,13 +37,13 @@ func _ready() -> void:
     action_label.text = "IDLE"
     action_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
     action_label.add_theme_font_size_override("font_size", 14)
-    action_label.position = Vector2(-50, -60)
-    action_label.custom_minimum_size = Vector2(100, 20)
+    action_label.position = Vector2(-50.0, -60.0)
+    action_label.custom_minimum_size = Vector2(100.0, 20.0)
     add_child(action_label)
 
 func _physics_process(delta: float) -> void:
     # Update label rotation so it stays upright
-    action_label.global_rotation = 0
+    action_label.rotation = -rotation
     action_label.text = current_action
 
     if current_action == "IDLE":
@@ -89,7 +89,7 @@ func _create_placeholder_sprite() -> void:
     # Create a simple ColorRect placeholder at runtime
     var rect = ColorRect.new()
     rect.color = Color.MEDIUM_AQUAMARINE
-    rect.size = Vector2(32, 32)
+    rect.size = Vector2(32.0, 32.0)
     rect.position = -rect.size / 2
     add_child(rect)
     # Move behind or hide the invisible sprite node
