@@ -116,6 +116,14 @@ def train(start_episode=0):
     training_start = time.time()
     os.makedirs(MODEL_DIR, exist_ok=True)
 
+    # Safety: initialize variables that are used after the episode loop
+    # If the loop doesn't execute or all episodes error out,
+    # these still need to be defined
+    sample_experience = None
+    sample_reflection = None
+    sample_dream = None
+    adam_stats_dict = {'health': 100, 'hunger': 0, 'energy': 100, 'stress': 0, 'pain': 0}
+
     # Load from checkpoint if resuming
     if start_episode > 0:
         cp_path = os.path.join(MODEL_DIR, f"baby_brain_run3_ep{start_episode}.pt")
