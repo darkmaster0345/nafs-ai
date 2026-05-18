@@ -44,6 +44,7 @@ from thought_engine import ThoughtEngine
 from curiosity import CuriosityModule
 from dreaming import DreamEngine
 from tb_logger import TBLogger
+from ws_bridge import WSBridge
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Configuration
@@ -335,6 +336,18 @@ def run_life():
     dream_engine = DreamEngine()
     tb_logger = TBLogger(log_dir="runs/nafs_single_life")
     
+    # Initialize WebSocket bridge for dashboard (works without dashboard too)
+    ws_bridge = WSBridge()
+    ws_bridge.start()
+    
+    # Send birth event to dashboard
+    ws_bridge.send_birth_data({
+        "biome": world_state.get('biome', 'plains'),
+        "weather": world_state.get('weather', 'clear'),
+        "position": [world_state.get('adam_x', 0), world_state.get('adam_y', 0)],
+        "time_of_day": world_state.get('time_of_day', 12),
+    })
+    
     # Encode initial observation
     init_phase5 = thought_engine.get_phase5_signals(world_state, adam_stats_dict)
     sensory_input = encode_sensory_input(
@@ -491,6 +504,52 @@ def run_life():
                 tick, world_state, adam_stats_dict, action, reward,
                 latest_thought, latest_emotion, biome_data, weather_data
             )
+            
+            # Send tick data to dashboard
+            personality = thought_engine.get_personality()
+            cs = curiosity.get_curiosity_stats()
+            ds = dream_engine.get_dream_stats()
+            ws_bridge.send_tick_data({
+                "tick": tick,
+                "alive": not done,
+                "adam_stats": {
+                    "health": round(adam_stats_dict.get('health', 100), 1),
+                    "hunger": round(adam_stats_dict.get('hunger', 0), 1),
+                    "energy": round(adam_stats_dict.get('energy', 100), 1),
+                    "stress": round(adam_stats_dict.get('stress', 0), 1),
+                    "pain": round(adam_stats_dict.get('pain', 0), 1),
+                },
+                "world_state": {
+                    "biome": world_state.get('biome', 'plains'),
+                    "weather": world_state.get('weather', 'clear'),
+                    "temperature": round(world_state.get('temperature', 20), 1),
+                    "time_of_day": world_state.get('time_of_day', 12),
+                    "adam_x": world_state.get('adam_x', 0),
+                    "adam_y": world_state.get('adam_y', 0),
+                    "facing": world_state.get('facing', 'north'),
+                    "light_level": round(world_state.get('light_level', 0.5), 2),
+                    "smell_food": round(world_state.get('smell_food', 0), 2),
+                    "smell_danger": round(world_state.get('smell_danger', 0), 2),
+                    "wetness": round(world_state.get('wetness', 0), 2),
+                    "visibility": round(world_state.get('visibility', 1.0), 2),
+                },
+                "action": action,
+                "reward": round(reward, 3),
+                "total_reward": round(total_reward, 2),
+                "thought": latest_thought,
+                "emotion": latest_emotion,
+                "action_counts": all_action_counts,
+                "vocabulary_size": len(thought_engine.get_vocabulary()),
+                "discovered_words": thought_engine.get_discovered_vocabulary() if hasattr(thought_engine, 'get_discovered_vocabulary') else [],
+                "fear_triggers": personality.get('fear_triggers', 0),
+                "good_memories": personality.get('good_memories', 0),
+                "patterns_learned": personality.get('patterns_learned', 0),
+                "curiosity_states": cs.get('total_states_discovered', 0),
+                "dreams_total": ds.get('total_dreams', 0),
+                "nightmares": ds.get('nightmares', 0),
+                "peaceful_dreams": ds.get('peaceful_dreams', 0),
+                "personality": personality.get('disposition', 'uncertain'),
+            })
             
             # Full stats display periodically
             if tick % FULL_DISPLAY_EVERY == 0:
@@ -668,7 +727,16 @@ def run_life():
     # The philosophical constraint: when Adam dies, everything dies with him.
     # Running the program again creates a completely new Adam in a new world.
     
-    # Close TensorBoard
+    # Send death event to dashboard
+    ws_bridge.send_death_data({
+        "tick": tick,
+        "total_reward": total_reward,
+        "biome": world_state.get('biome', 'plains'),
+        "action_counts": all_action_counts,
+    })
+    
+    # Close connections
+    ws_bridge.stop()
     tb_logger.close()
 
 

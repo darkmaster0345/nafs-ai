@@ -3,14 +3,16 @@ Nafs AI — Observer Mode (Single-Life)
 "Watch Adam live. No training. Just observation."
 
 Runs Adam with a trained brain but NO learning.
-You observe Adam's behavior without the training process
-influencing what you see.
+You observe Adam's single life without the training process
+influencing what you see. Adam lives once — when he dies,
+the observation ends.
 
 Usage:
     python evaluate.py                          # Observe Adam's life with latest checkpoint
     python evaluate.py --checkpoint checkpoints/adam_tick1000.pt
     python evaluate.py --verbose                # Show every tick's thought
     python evaluate.py --record                 # Save all observations to file
+    python evaluate.py --delay 0.1              # Slow down for readability
 """
 
 import torch

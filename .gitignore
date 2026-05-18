@@ -11,11 +11,18 @@ checkpoints_*/
 
 # Training logs and artifacts
 training_log_run*.json
+life_log.json
+observation_results.json
 run*.log
 server.log
 server_test.log
 session_log.json
 memory_old_broken.json
+
+# Adam's memory (auto-generated — stays LOCAL, never pushed to GitHub)
+memory.json
+memory/
+memory/*.json
 
 # TensorBoard runs
 runs/

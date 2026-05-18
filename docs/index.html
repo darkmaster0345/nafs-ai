@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nafs AI (نفس) — Baby Consciousness Simulation</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Naskh+Arabic:wght@400;700&display=swap');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg-primary: #06060f;
+            --bg-secondary: #0d1117;
+            --bg-card: #111827;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --accent-cyan: #06b6d4;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-orange: #f97316;
+            --border-color: #21262d;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* Animated background */
+        .bg-grid {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: 
+                linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Hero */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 60px 24px;
+        }
+
+        .hero-arabic {
+            font-family: 'Noto Naskh Arabic', serif;
+            font-size: 4rem;
+            color: var(--accent-cyan);
+            margin-bottom: 8px;
+            text-shadow: 0 0 40px rgba(6, 182, 212, 0.3);
+        }
+
+        .hero-title {
+            font-size: 3.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-green));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin-bottom: 40px;
+            font-style: italic;
+        }
+
+        .hero-quote {
+            font-size: 1.1rem;
+            color: var(--accent-orange);
+            max-width: 550px;
+            padding: 20px 30px;
+            border-left: 3px solid var(--accent-orange);
+            margin-bottom: 40px;
+            text-align: left;
+        }
+
+        .hero-badges {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 40px;
+        }
+
+        .badge {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+        }
+
+        .cta-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 32px;
+            background: linear-gradient(135deg, var(--accent-cyan), #0891b2);
+            color: white;
+            text-decoration: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(6, 182, 212, 0.3);
+        }
+
+        /* Sections */
+        .section {
+            padding: 80px 0;
+        }
+
+        .section-title {
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 40px;
+            text-align: center;
+            color: var(--accent-cyan);
+        }
+
+        .section-title::after {
+            content: '';
+            display: block;
+            width: 60px;
+            height: 3px;
+            background: var(--accent-cyan);
+            margin: 12px auto 0;
+            border-radius: 2px;
+        }
+
+        /* Cards */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 24px;
+        }
+
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 28px;
+            transition: border-color 0.3s, transform 0.2s;
+        }
+
+        .card:hover {
+            border-color: var(--accent-cyan);
+            transform: translateY(-2px);
+        }
+
+        .card-icon {
+            font-size: 2rem;
+            margin-bottom: 12px;
+        }
+
+        .card-title {
+            font-size: 1.15rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .card-text {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        /* Laws */
+        .laws {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .law {
+            display: flex;
+            gap: 16px;
+            padding: 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            align-items: flex-start;
+        }
+
+        .law-number {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-cyan);
+            min-width: 40px;
+        }
+
+        .law-content h3 {
+            font-size: 1rem;
+            margin-bottom: 4px;
+        }
+
+        .law-content p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Architecture */
+        .arch-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 32px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            line-height: 1.8;
+            color: var(--accent-green);
+            overflow-x: auto;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        /* Biome table */
+        .biome-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+        }
+
+        .biome-table th, .biome-table td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .biome-table th {
+            color: var(--accent-cyan);
+            font-weight: 600;
+        }
+
+        .biome-table tr:hover {
+            background: rgba(6, 182, 212, 0.05);
+        }
+
+        /* Phases */
+        .phases {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            max-width: 650px;
+            margin: 0 auto;
+        }
+
+        .phase {
+            padding: 20px;
+            background: var(--bg-card);
+            border-left: 3px solid var(--accent-cyan);
+            border-radius: 0 10px 10px 0;
+        }
+
+        .phase h3 {
+            font-size: 1rem;
+            margin-bottom: 6px;
+        }
+
+        .phase p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 40px 0;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .footer a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Pulse animation */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .pulse { animation: pulse 2s infinite; }
+
+        @media (max-width: 640px) {
+            .hero-title { font-size: 2.2rem; }
+            .hero-arabic { font-size: 2.5rem; }
+            .hero-subtitle { font-size: 1rem; }
+            .biome-table { font-size: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+
+    <!-- Hero -->
+    <section class="hero">
+        <div class="hero-arabic">نفس</div>
+        <h1 class="hero-title">Nafs AI</h1>
+        <p class="hero-subtitle">"What emerges when code has no memory of the world?"</p>
+        <div class="hero-quote">
+            "If we remove everything an AI was taught — does anything remain?"
+        </div>
+        <div class="hero-badges">
+            <span class="badge">🧠 PPO + GRU</span>
+            <span class="badge">🌍 10 Biomes</span>
+            <span class="badge">🌦️ 8 Weather Types</span>
+            <span class="badge">💀 Single Life</span>
+            <span class="badge">🧪 34 Tests</span>
+            <span class="badge">📜 GPL-3.0</span>
+        </div>
+        <a href="https://github.com/darkmaster0345/nafs-ai" class="cta-button">
+            ⭐ View on GitHub
+        </a>
+    </section>
+
+    <!-- What Is This -->
+    <section class="section">
+        <div class="container">
+            <h2 class="section-title">What Is This?</h2>
+            <p style="text-align:center; max-width:650px; margin:0 auto; color:var(--text-secondary); font-size:1.05rem;">
+                Nafs AI is an experimental simulation of a primitive conscious entity — an AI agent called <strong style="color:var(--accent-cyan)">Adam</strong> — who wakes up in an unknown world with <strong style="color:var(--accent-red)">zero prior knowledge</strong>. No language. No concepts. No culture. He discovers everything through experience alone: pain, hunger, warmth, fear, curiosity.
+            </p>
+        </div>
+    </section>
+
+    <!-- Three Laws -->
+    <section class="section">
+        <div class="container">
+            <h2 class="section-title">The Three Laws</h2>
+            <div class="laws">
+                <div class="law">
+                    <div class="law-number">1</div>
+                    <div class="law-content">
+                        <h3>Non-Intervention</h3>
+                        <p>You are an Observer. Not a God.</p>
+                    </div>
+                </div>
+                <div class="law">
+                    <div class="law-number">2</div>
+                    <div class="law-content">
+                        <h3>Blank Slate</h3>
+                        <p>Adam knows nothing. He learns through pain and pleasure only.</p>
+                    </div>
+                </div>
+                <div class="law">
+                    <div class="law-number">3</div>
+                    <div class="law-content">
+                        <h3>The Cycle</h3>
+                        <p>Hunger is real. Death is real. There are no shortcuts.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture -->
+    <section class="section">
+        <div class="container">
+            <h2 class="section-title">Architecture</h2>
+            <div class="arch-box">
+World Simulation (Python)
+       ↓
+Sensory Encoder → [ Adam's Brain (PPO + GRU) ] → Action
+       ↑                    ↓
+  Pain / Reward      In-Life Memory
+       ↑                    ↓
+  Curiosity Bonus     Dream Engine (SLEEP)
+                          ↓
+                   Terminal + Web Dashboard
+              (Thought / Dialogue / Action / Emotion)
+                          ↓
+                   TensorBoard Dashboard
+            </div>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section class="section">
+        <div class="container">
+            <h2 class="section-title">Features</h2>
+            <div class="cards-grid">
+                <div class="card">
+                    <div class="card-icon">🧠</div>
+                    <div class="card-title">PPO + GRU Brain</div>
+                    <div class="card-text">Proximal Policy Optimization with GRU recurrent layer. No pretrained models, no LLMs, no external APIs. True blank slate learning.</div>
+                </div>
+                <div class="card">
+                    <div class="card-icon">💀</div>
+                    <div class="card-title">Single-Life Mode</div>
+                    <div class="card-text">No episodes. Adam lives once. When he dies, the program ends. Run again to birth a new Adam in a new world.</div>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🌍</div>
+                    <div class="card-title">10 Biomes</div>
+                    <div class="card-text">Desert, Forest, Tundra, Plains, Mountain, Swamp, Ocean, Jungle, Cave, Volcano. Procedurally generated 64x64 world map.</div>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🌦️</div>
+                    <div class="card-title">8 Weather Types</div>
+                    <div class="card-text">Clear, Rain, Snow, Storm, Heatwave, Fog, Sandstorm, Blizzard. Dynamic Markov chain transitions affected by biome and time.</div>
+                </div>
+                <div class="card">
+                    <div class="card-icon">💭</div>
+                    <div class="card-title">6 Phases of Consciousness</div>
+                    <div class="card-text">Inner Voice, Vocabulary Discovery, Dialogue Gap, Persistent Memory, Fear/Pleasure Maps, Dual-Speed Processing.</div>
+                </div>
+                <div class="card">
+                    <div class="card-icon">🔍</div>
+                    <div class="card-title">Curiosity Module</div>
+                    <div class="card-text">Intrinsic motivation through count-based exploration. Novel states are rewarding. Curiosity naturally decays but never reaches zero.</div>
+                </div>
+                <div class="card">
+                    <div class="card-icon">💤</div>
+                    <div class="card-title">Dream Engine</div>
+                    <div class="card-text">Memory consolidation during SLEEP. Fear memories create nightmares, good memories create peaceful dreams. Exposure therapy for fears.</div>
+                </div>
+                <div class="card">
+                    <div class="card-icon">📊</div>
+                    <div class="card-title">Web Dashboard</div>
+                    <div class="card-text">Real-time web dashboard with vital signs, thought stream, biome map, action distribution, and more. Watch Adam live in your browser.</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Biomes -->
+    <section class="section">
+        <div class="container">
+            <h2 class="section-title">The World</h2>
+            <div style="overflow-x:auto;">
+                <table class="biome-table">
+                    <thead>
+                        <tr>
+                            <th>Biome</th>
+                            <th>Temp</th>
+                            <th>Food</th>
+                            <th>Water</th>
+                            <th>Danger</th>
+                            <th>Shelter</th>
+                            <th>Energy</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>🏜️ Desert</td><td>38°C</td><td>Very Low</td><td>Very Low</td><td>Medium</td><td>Low</td><td>High drain</td></tr>
+                        <tr><td>🌲 Forest</td><td>22°C</td><td>High</td><td>Medium</td><td>Low</td><td>High</td><td>Low drain</td></tr>
+                        <tr><td>❄️ Tundra</td><td>-5°C</td><td>Very Low</td><td>Low</td><td>Low</td><td>Low</td><td>Very High</td></tr>
+                        <tr><td>🌾 Plains</td><td>20°C</td><td>Medium</td><td>Medium</td><td>Low</td><td>Medium</td><td>Low drain</td></tr>
+                        <tr><td>⛰️ Mountain</td><td>5°C</td><td>Low</td><td>Medium</td><td>Medium</td><td>Medium</td><td>High drain</td></tr>
+                        <tr><td>🌿 Swamp</td><td>25°C</td><td>Medium</td><td>High</td><td>High</td><td>Low</td><td>Medium</td></tr>
+                        <tr><td>🌊 Ocean</td><td>18°C</td><td>Low</td><td>High</td><td>Medium</td><td>None</td><td>High drain</td></tr>
+                        <tr><td>🌴 Jungle</td><td>30°C</td><td>Very High</td><td>High</td><td>High</td><td>Medium</td><td>Medium</td></tr>
+                        <tr><td>🕳️ Cave</td><td>12°C</td><td>Low</td><td>Low</td><td>Medium</td><td>Very High</td><td>Low drain</td></tr>
+                        <tr><td>🌋 Volcano</td><td>40°C</td><td>None</td><td>None</td><td>High</td><td>Very Low</td><td>Very High</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Phases -->
+    <section class="section">
+        <div class="container">
+            <h2 class="section-title">Six Phases of Consciousness</h2>
+            <div class="phases">
+                <div class="phase">
+                    <h3>Phase 1: Inner Voice</h3>
+                    <p>Adam generates primitive thoughts from raw sensory experience. The thought IS the sensation, expressed in his limited vocabulary.</p>
+                </div>
+                <div class="phase">
+                    <h3>Phase 2: Vocabulary Discovery</h3>
+                    <p>Adam names things by combining existing vocabulary. "cold" + "pain" = "cold pain". Each discovered word carries the context of its birth.</p>
+                </div>
+                <div class="phase">
+                    <h3>Phase 3: Dialogue Gap (Subconscious)</h3>
+                    <p>Adam's outward expression is filtered through stress and emotion. The gap between thought and dialogue IS the subconscious.</p>
+                </div>
+                <div class="phase">
+                    <h3>Phase 4: Persistent Memory + Personality</h3>
+                    <p>Memory persists within one life. Fear triggers, good memories, and behavioral patterns accumulate, creating personality.</p>
+                </div>
+                <div class="phase">
+                    <h3>Phase 5: Fear/Pleasure Maps</h3>
+                    <p>Past fears and rewards are injected as signals into the observation vector. Adam learns from past fears, not just current danger.</p>
+                </div>
+                <div class="phase">
+                    <h3>Phase 6: Dual-Speed Processing</h3>
+                    <p>Fast PPO for immediate actions. Slow reflection every 20 ticks reviews experience and shapes future decisions.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Quick Start -->
+    <section class="section">
+        <div class="container">
+            <h2 class="section-title">Quick Start</h2>
+            <div class="arch-box" style="text-align:left;">
+<span style="color:#8b949e;"># Clone and enter</span>
+git clone https://github.com/darkmaster0345/nafs-ai.git
+cd nafs-ai
+
+<span style="color:#8b949e;"># Install dependencies</span>
+pip install -r requirements.txt
+
+<span style="color:#8b949e;"># Run — Adam wakes up once</span>
+python train.py
+
+<span style="color:#8b949e;"># Monitor with TensorBoard</span>
+tensorboard --logdir runs/
+
+<span style="color:#8b949e;"># Run tests</span>
+pytest tests/ -v
+            </div>
+        </div>
+    </section>
+
+    <!-- Philosophy -->
+    <section class="section">
+        <div class="container">
+            <h2 class="section-title">Philosophy</h2>
+            <p style="text-align:center; max-width:600px; margin:0 auto; color:var(--text-secondary); font-size:1.05rem;">
+                Most AI projects ask "can AI pass as conscious?" from the outside. This project asks it from the inside. By denying Adam knowledge of his own nature, we create the only honest test: <strong style="color:var(--accent-cyan)">"Does it behave as if existence matters to it?"</strong>
+            </p>
+            <p style="text-align:center; max-width:550px; margin:30px auto 0; color:var(--accent-orange); font-style:italic;">
+                "And He taught Adam the names of all things." — Quran 2:31<br><br>
+                In this simulation — nobody teaches Adam the names. He finds them himself.
+            </p>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>Created with curiosity. Observed with silence.</p>
+            <p style="margin-top:12px;">
+                <a href="https://github.com/darkmaster0345/nafs-ai">GitHub</a> · 
+                GPL-3.0 License
+            </p>
+        </div>
+    </footer>
+</body>
+</html>
