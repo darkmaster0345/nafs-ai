@@ -3,11 +3,41 @@
 venv/
 __pycache__/
 *.pyc
+*.pyo
 
-# Adam's memory (optional — you may want to commit this)
-# memory.json
+# Model checkpoints (too large for git)
+checkpoints/
+checkpoints_*/
+
+# Training logs and artifacts
+training_log_run*.json
+run*.log
+server.log
+server_test.log
+session_log.json
+memory_old_broken.json
+
+# TensorBoard runs
+runs/
 
 # IDE
 .vscode/
 .idea/
 *.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Adam's memory (auto-generated — stays local, never pushed)
+memory.json
+
+# Backups (local only)
+backups/
+
+# Manus original (reference only)
+manus_original/
+
+# Legacy v0.1 (archived — kept in legacy/ for reference)
+# legacy/

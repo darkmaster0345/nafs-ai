@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from config import STARTING_VOCABULARY, SIM_CONFIG, FORBIDDEN_CONCEPTS
 
 
@@ -167,10 +168,15 @@ class Adam:
     # ── Violation Detection ───────────────────────────────────────────────────
 
     def response_is_clean(self, response: dict) -> bool:
-        """Check if response contains forbidden modern knowledge."""
+        """Check if response contains forbidden modern knowledge.
+        Uses word boundary matching to avoid false positives
+        (e.g. 'pain' should not match 'artificial').
+        """
         text = json.dumps(response).lower()
         for concept in FORBIDDEN_CONCEPTS:
-            if concept.lower() in text:
+            # Use word boundary regex to match whole words/phrases only
+            pattern = r'\b' + re.escape(concept.lower()) + r'\b'
+            if re.search(pattern, text):
                 return False
         return True
 
