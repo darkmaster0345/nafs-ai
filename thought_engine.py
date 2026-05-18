@@ -584,7 +584,13 @@ class PersistentMemory:
         """Get fear triggers that are similar to the current world state."""
         relevant = []
         for fear in self.fear_triggers[-5:]:
-            event = fear.get('event', '').lower()
+            # Handle both dict and string fear entries (legacy data may store strings)
+            if isinstance(fear, dict):
+                event = fear.get('event', '').lower()
+            elif isinstance(fear, str):
+                event = fear.lower()
+            else:
+                continue
             # Simple keyword matching for relevance
             if world_state.get('smell_danger', 0) > 0.3 and ('danger' in event or 'bad' in event or 'dark' in event):
                 relevant.append(fear)
@@ -596,7 +602,13 @@ class PersistentMemory:
         """Get good memories that are similar to the current world state."""
         relevant = []
         for mem in self.good_memories[-5:]:
-            event = mem.get('event', '').lower()
+            # Handle both dict and string memory entries (legacy data may store strings)
+            if isinstance(mem, dict):
+                event = mem.get('event', '').lower()
+            elif isinstance(mem, str):
+                event = mem.lower()
+            else:
+                continue
             if world_state.get('smell_food', 0) > 0.3 and ('food' in event or 'good' in event or 'near' in event):
                 relevant.append(mem)
             elif world_state.get('wetness', 0) > 0.3 and ('water' in event or 'wet' in event):
@@ -747,8 +759,17 @@ class PersistentMemory:
                 data = json.load(f)
             self.episodes_survived = data.get("episodes_survived", 0)
             self.total_ticks_lived = data.get("total_ticks_lived", 0)
-            self.fear_triggers = data.get("fear_triggers", [])
-            self.good_memories = data.get("good_memories", [])
+            # Sanitize: ensure fear_triggers and good_memories are dicts, not strings
+            raw_fears = data.get("fear_triggers", [])
+            self.fear_triggers = [
+                f if isinstance(f, dict) else {"event": str(f), "action": "", "outcome": "", "reward": -1.0, "tick": 0}
+                for f in raw_fears
+            ]
+            raw_good = data.get("good_memories", [])
+            self.good_memories = [
+                m if isinstance(m, dict) else {"event": str(m), "action": "", "outcome": "", "reward": 1.0, "tick": 0}
+                for m in raw_good
+            ]
             self.key_experiences = data.get("key_experiences", [])
             self.pattern_memory = data.get("pattern_memory", {})
             # Phase 2: Restore discovered vocabulary
