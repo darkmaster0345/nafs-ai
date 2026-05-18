@@ -266,8 +266,6 @@ nafs-ai/
 ├── MainScene.tscn        ← Godot main scene
 ├── NetworkController.gd  ← Godot network layer
 ├── project.godot         ← Godot project config
-│
-└── backups/              ← Phase-by-phase code backups
 ```
 
 ---
