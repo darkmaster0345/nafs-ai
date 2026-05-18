@@ -53,8 +53,8 @@ def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 if __name__ == '__main__':
-    input_dim = 12  # 12-dimensional sensory vector
-    hidden_dim = 256 # 64 hidden units for GRU
+    input_dim = 21  # 21-dimensional sensory vector (15 base + 4 biome + 1 weather + 1 time)
+    hidden_dim = 256 # GRU hidden units
     num_actions = 8 # EXPLORE, EAT, DRINK, SLEEP, HIDE, MOVE, FLEE, IDLE
 
     model = BabyBrain(input_dim, hidden_dim, num_actions)

@@ -79,21 +79,24 @@ class TestWorldSim:
         assert done is True
         assert reward < -4.0
 
-    def test_episode_randomization(self):
+    def test_world_has_biome(self):
         env = WorldSim()
-        temps = []
-        for _ in range(10):
-            world_state, _ = env.reset()
-            temps.append(world_state['temperature'])
-        assert len(set(round(t, 1) for t in temps)) > 1
+        world_state, _ = env.reset()
+        assert 'biome' in world_state
+        assert world_state['biome'] in ['desert', 'forest', 'tundra', 'plains',
+                                         'mountain', 'swamp', 'ocean', 'jungle',
+                                         'cave', 'volcano']
 
-    def test_per_episode_params_vary(self):
+    def test_world_has_weather(self):
         env = WorldSim()
-        rates = []
-        for _ in range(10):
-            env.reset()
-            rates.append(env.hunger_rate)
-        assert len(set(round(r, 2) for r in rates)) > 1
+        world_state, _ = env.reset()
+        assert 'weather' in world_state
+
+    def test_world_map_exists(self):
+        env = WorldSim()
+        env.reset()
+        assert env.world_map.width > 0
+        assert env.world_map.height > 0
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -102,18 +105,22 @@ class TestWorldSim:
 
 class TestSensoryEncoder:
     def test_output_dimensions(self):
+        from sensory_encoder import INPUT_DIM
         ws = {'temperature': 20, 'light_level': 0.5, 'smell_food': 0,
               'smell_danger': 0, 'sound_level': 0.1, 'wetness': 0,
-              'proximity_entity': 0, 'touch_softness': 0.5}
+              'proximity_entity': 0, 'touch_softness': 0.5,
+              'biome': 'plains', 'weather': 'clear', 'time_of_day': 12}
         stats = {'health': 100, 'hunger': 0, 'energy': 100,
                  'pain': 0, 'stress': 0}
         result = encode_sensory_input(ws, stats)
-        assert result.shape == (15,)
+        assert result.shape == (INPUT_DIM,)
+        assert INPUT_DIM == 21
 
     def test_all_values_in_range(self):
         ws = {'temperature': -10, 'light_level': 0, 'smell_food': 1,
               'smell_danger': 1, 'sound_level': 1, 'wetness': 1,
-              'proximity_entity': 1, 'touch_softness': 0}
+              'proximity_entity': 1, 'touch_softness': 0,
+              'biome': 'volcano', 'weather': 'storm', 'time_of_day': 0}
         stats = {'health': 0, 'hunger': 100, 'energy': 0,
                  'pain': 10, 'stress': 100}
         result = encode_sensory_input(ws, stats,
@@ -123,8 +130,9 @@ class TestSensoryEncoder:
         assert (result <= 1.0).all()
 
     def test_default_values_work(self):
+        from sensory_encoder import INPUT_DIM
         result = encode_sensory_input({}, {})
-        assert result.shape == (15,)
+        assert result.shape == (INPUT_DIM,)
 
     def test_phase5_signals_included(self):
         result = encode_sensory_input({}, {},
@@ -141,8 +149,9 @@ class TestSensoryEncoder:
 
 class TestBabyBrain:
     def test_forward_pass(self):
-        model = BabyBrain(15, 256, 8)
-        x = torch.randn(1, 15)
+        from sensory_encoder import INPUT_DIM
+        model = BabyBrain(INPUT_DIM, 256, 8)
+        x = torch.randn(1, INPUT_DIM)
         h = model.init_hidden(1)
         logits, value, next_h = model(x, h)
         assert logits.shape == (1, 8)
@@ -150,12 +159,14 @@ class TestBabyBrain:
         assert next_h.shape == (1, 1, 256)
 
     def test_parameter_count_reasonable(self):
-        model = BabyBrain(15, 256, 8)
+        from sensory_encoder import INPUT_DIM
+        model = BabyBrain(INPUT_DIM, 256, 8)
         total = sum(p.numel() for p in model.parameters() if p.requires_grad)
         assert 50000 <= total <= 500000
 
     def test_hidden_state_shape(self):
-        model = BabyBrain(15, 256, 8)
+        from sensory_encoder import INPUT_DIM
+        model = BabyBrain(INPUT_DIM, 256, 8)
         h = model.init_hidden(4)
         assert h.shape == (1, 4, 256)
 
@@ -353,11 +364,10 @@ class TestDreamEngine:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class TestIntegration:
-    def test_full_episode_cycle(self):
+    def test_full_life_cycle(self):
+        from sensory_encoder import INPUT_DIM
         env = WorldSim()
-        model = BabyBrain(15, 256, 8)
-        thought_gen = ThoughtGenerator()
-        emotion_cls = EmotionClassifier()
+        model = BabyBrain(INPUT_DIM, 256, 8)
 
         world_state, adam_stats = env.reset()
         sensory = encode_sensory_input(world_state, adam_stats)
@@ -379,7 +389,7 @@ class TestIntegration:
 
         assert total_reward != 0
 
-    def test_curiosity_integrates_with_training(self):
+    def test_curiosity_integrates_with_life(self):
         env = WorldSim()
         curiosity = CuriosityModule()
 
@@ -394,6 +404,19 @@ class TestIntegration:
                 break
 
         assert total_intrinsic > 0
+
+    def test_move_changes_position(self):
+        env = WorldSim()
+        env.reset()
+        old_x, old_y = env.adam_x, env.adam_y
+        env.step("MOVE")
+        # Position should change (wrapping is possible so check not always same)
+        # After many MOVEs, position should definitely change
+        positions = set()
+        for _ in range(10):
+            env.step("MOVE")
+            positions.add((env.adam_x, env.adam_y))
+        assert len(positions) > 1  # Adam should have moved
 
 
 if __name__ == '__main__':

@@ -29,10 +29,51 @@ def describe_world_event(world_state: dict, adam_stats: dict) -> str:
 
     This is what Adam "sees" and "feels" from the environment.
     Uses only sensory language — no concepts, no naming, no interpretation.
+    Now includes biome and weather descriptions.
 
     Returns: str — primitive description of the current moment
     """
     parts = []
+
+    # Biome description (primitive — Adam describes what he feels)
+    biome = world_state.get('biome', '')
+    if biome == 'desert':
+        parts.append("Sand. Dry ground. Hot wind.")
+    elif biome == 'forest':
+        parts.append("Trees. Green. Cool shade.")
+    elif biome == 'tundra':
+        parts.append("White ground. Freezing. Nothing grows.")
+    elif biome == 'plains':
+        parts.append("Open grass. Wind. Can see far.")
+    elif biome == 'mountain':
+        parts.append("Steep rocks. Thin air. Cold.")
+    elif biome == 'swamp':
+        parts.append("Wet mud. Smell of rot. Bugs.")
+    elif biome == 'ocean':
+        parts.append("Water everywhere. Waves. Salt.")
+    elif biome == 'jungle':
+        parts.append("Dense green. Humid. Something watching.")
+    elif biome == 'cave':
+        parts.append("Dark stone. Echoes. Dripping.")
+    elif biome == 'volcano':
+        parts.append("Hot ground. Smoke. Smell of fire.")
+
+    # Weather description
+    weather = world_state.get('weather', '')
+    if weather == 'rain':
+        parts.append("Rain. Cold drops on skin. Wet.")
+    elif weather == 'snow':
+        parts.append("Snow. White flakes. Cold.")
+    elif weather == 'storm':
+        parts.append("Thunder. Lightning. Wind. Scared.")
+    elif weather == 'heatwave':
+        parts.append("Scorching. Air shimmers. Dry heat.")
+    elif weather == 'fog':
+        parts.append("Fog. Cannot see. White mist.")
+    elif weather == 'sandstorm':
+        parts.append("Sand in eyes. Cannot see. Wind.")
+    elif weather == 'blizzard':
+        parts.append("Whiteout. Wind screaming. Cannot move.")
 
     # Temperature
     temp = world_state.get('temperature', 20)
@@ -1220,7 +1261,7 @@ class ThoughtEngine:
     """
 
     def __init__(self, vocabulary: list = None, memory_size: int = 10,
-                 memory_filepath: str = "memory.json"):
+                 memory_filepath: str = None):
         self.thought_gen = ThoughtGenerator(vocabulary)
         self.emotion_cls = EmotionClassifier()
         self.memory = EpisodeMemory(max_size=memory_size)
@@ -1229,8 +1270,10 @@ class ThoughtEngine:
         self.persistent_memory = PersistentMemory()  # Phase 4
         self.memory_filepath = memory_filepath
 
-        # Load persistent memory from disk (survives training restarts)
-        self.persistent_memory.load_from_disk(memory_filepath)
+        # In single-life mode, Adam starts with NO memory from past lives.
+        # Only load if a filepath is explicitly provided (for backward compat).
+        if memory_filepath is not None:
+            self.persistent_memory.load_from_disk(memory_filepath)
 
         # Restore discovered vocabulary from persistent memory
         if self.persistent_memory._discovered_vocabulary:
