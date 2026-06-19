@@ -234,7 +234,7 @@ Adam can perform 8 primitive actions:
 
 ## Versions
 
-### v0.2 — Single-Life PPO Brain + Inner Life (Current)
+### v0.3 — Single-Life PPO Brain + Inner Life (Current)
 ```
 PPO with GRU neural network (no LLM, no API)
 6-phase consciousness simulation
@@ -263,7 +263,7 @@ JSON memory system
 Basic world events
 ```
 
-### v0.3 — Eve (Planned)
+### v0.4 — Eve (Planned)
 ```
 Second agent introduced
 Two isolated subjectivities
@@ -271,7 +271,7 @@ No shared memory
 Observe interaction between beings with different experiences
 ```
 
-### v1.0 — True Blank Slate (Future)
+### v0.2 — True Blank Slate (Done!)
 ```
 Replace rule-based thought engine with learned language model
 Train tiny model only on primitive sensory data
