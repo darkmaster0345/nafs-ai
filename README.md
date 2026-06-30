@@ -6,7 +6,7 @@
 [![Status: In Development](https://img.shields.io/badge/Status-In%20Development-yellow.svg)]()
 [![Platform: CLI+Web](https://img.shields.io/badge/Platform-CLI%20%2B%20Web-blue.svg)]()
 [![Brain: PPO+GRU](https://img.shields.io/badge/Brain-PPO%2BGRU-orange.svg)]()
-[![Tests: 34 passed](https://img.shields.io/badge/Tests-34%20passed-brightgreen.svg)]()
+[![Tests: 59 passed](https://img.shields.io/badge/Tests-59%20passed-brightgreen.svg)]()
 
 ---
 
@@ -263,20 +263,20 @@ JSON memory system
 Basic world events
 ```
 
-### v0.4 — Eve (Planned)
+### v0.3 — Eve + Learned Thinking (Current)
 ```
-Second agent introduced
-Two isolated subjectivities
-No shared memory
-Observe interaction between beings with different experiences
-```
-
-### v0.3 — True Blank Slate (In progress)
-```
-Replace rule-based thought engine with learned language model
-Train tiny model only on primitive sensory data
-Zero world knowledge at model level
-Genuine language emergence from experience
+Second agent (Eve) with completely separate brain, memory, and personality
+Both agents share the world but experience it independently
+Eve has her own PPO+GRU brain, ThoughtEngine, Curiosity, DreamEngine
+Eve has her own LearnedThinker (separate transformer)
+Agents can sense each other's presence when nearby (no thought sharing)
+Tiny transformer (540K params) learns to generate Adam's thoughts from sensory experience
+Trains on a rolling buffer of (sensory_state, thought) pairs
+Gradually blends rule-based and learned thoughts based on model confidence
+Character-level tokenizer with <pad> and <eot> special tokens
+Architecture: 2 transformer decoder layers, 4 attention heads, 128-dim embeddings
+12 new tests for Eve agent (59 total tests passing)
+13 new tests for learned thinking module
 ```
 
 ### v2.0 — Godot Visual World (Future)

@@ -421,3 +421,275 @@ class TestIntegration:
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Learned Thinking Module Tests (v1.0 experimental)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestLearnedThinking:
+    def test_tokenizer_encode_decode_roundtrip(self):
+        from learned_thinking import ThoughtTokenizer
+        text = "cold. dark."
+        tokens = ThoughtTokenizer.encode(text)
+        assert tokens.shape[0] == ThoughtTokenizer.MAX_THOUGHT_LEN
+        decoded = ThoughtTokenizer.decode(tokens)
+        assert decoded == "cold. dark."
+
+    def test_tokenizer_has_special_tokens(self):
+        from learned_thinking import ThoughtTokenizer
+        assert ThoughtTokenizer.PAD_IDX != ThoughtTokenizer.EOT_IDX
+        assert ThoughtTokenizer.VOCAB_SIZE == 31
+
+    def test_tokenizer_handles_unknown_chars(self):
+        from learned_thinking import ThoughtTokenizer
+        # Capital letters and punctuation not in vocab should become space
+        tokens = ThoughtTokenizer.encode("COLD!!!")
+        decoded = ThoughtTokenizer.decode(tokens)
+        assert "cold" in decoded
+
+    def test_transformer_forward_pass(self):
+        from learned_thinking import ThoughtTransformer, ThoughtTokenizer
+        model = ThoughtTransformer(sensory_dim=21)
+        sensory = torch.randn(2, 21)  # batch of 2
+        chars = torch.randint(0, ThoughtTokenizer.VOCAB_SIZE, (2, 10))
+        logits = model(sensory, chars)
+        assert logits.shape == (2, 10, ThoughtTokenizer.VOCAB_SIZE)
+
+    def test_transformer_generate_returns_string(self):
+        from learned_thinking import ThoughtTransformer
+        model = ThoughtTransformer(sensory_dim=21)
+        sensory = torch.randn(21)
+        result = model.generate(sensory, max_len=20, temperature=0.5)
+        assert isinstance(result, str)
+
+    def test_learned_thinker_records_experiences(self):
+        from learned_thinking import LearnedThinker
+        thinker = LearnedThinker(sensory_dim=21, buffer_size=100, train_interval=5, batch_size=4)
+        thinker.start()
+        for i in range(20):
+            sensory = torch.randn(21)
+            thinker.record_experience(sensory, f"thought {i}")
+        assert len(thinker.buffer) == 20
+        assert thinker.tick_count == 20
+
+    def test_learned_thinker_trains(self):
+        from learned_thinking import LearnedThinker
+        thinker = LearnedThinker(sensory_dim=21, buffer_size=200, train_interval=5, batch_size=8)
+        thinker.start()
+        for i in range(100):
+            sensory = torch.randn(21)
+            thinker.record_experience(sensory, "cold. dark." if i % 2 == 0 else "warm. good.")
+        assert thinker.train_steps > 0
+        assert thinker.stats['avg_loss'] > 0
+
+    def test_learned_thinker_not_ready_initially(self):
+        from learned_thinking import LearnedThinker
+        thinker = LearnedThinker(sensory_dim=21)
+        assert not thinker.is_ready()
+        assert thinker.confidence == 0.0
+
+    def test_blend_thoughts_uses_rule_based_when_low_confidence(self):
+        from learned_thinking import blend_thoughts
+        result = blend_thoughts("rule thought", "learned", 0.1)
+        assert result == "rule thought"
+
+    def test_blend_thoughts_uses_learned_when_high_confidence(self):
+        from learned_thinking import blend_thoughts
+        # Force deterministic choice
+        import random
+        random.seed(42)
+        # With confidence=1.0, should always use learned
+        result = blend_thoughts("rule", "learned", 1.0)
+        assert result == "learned"
+
+    def test_blend_thoughts_rejects_gibberish(self):
+        from learned_thinking import blend_thoughts
+        # Learned thought with too few alpha chars should be rejected
+        result = blend_thoughts("rule thought", "...", 1.0)
+        assert result == "rule thought"
+
+    def test_learned_thinker_save_load(self):
+        from learned_thinking import LearnedThinker
+        import tempfile
+        thinker1 = LearnedThinker(sensory_dim=21)
+        thinker1.start()
+        # Record some experiences to train
+        for i in range(50):
+            thinker1.record_experience(torch.randn(21), "test thought")
+        # Save
+        with tempfile.NamedTemporaryFile(suffix='.pt', delete=False) as f:
+            path = f.name
+        thinker1.save(path)
+        # Load into new thinker
+        thinker2 = LearnedThinker(sensory_dim=21)
+        thinker2.load(path)
+        assert thinker2.train_steps == thinker1.train_steps
+        os.unlink(path)
+
+    def test_parameter_count_reasonable(self):
+        from learned_thinking import ThoughtTransformer
+        model = ThoughtTransformer(sensory_dim=21)
+        params = model.parameter_count()
+        # Should be between 100K and 2M
+        assert 100_000 < params < 2_000_000
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Eve Agent Tests (v0.3)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestEveAgent:
+    def test_eve_can_be_created(self):
+        from eve_agent import EveAgent
+        from world_sim import WorldSim
+        env = WorldSim()
+        env.reset()
+        eve = EveAgent(env, device='cpu')
+        assert eve.name == "Eve"
+        assert eve.model is not None
+        assert eve.thought_engine is not None
+
+    def test_eve_birth_sets_position(self):
+        from eve_agent import EveAgent
+        from world_sim import WorldSim
+        env = WorldSim()
+        env.reset()
+        eve = EveAgent(env, device='cpu')
+        eve.birth(adam_x=env.adam_x, adam_y=env.adam_y)
+        assert eve.alive is True
+        assert 0 <= eve.x < env.world_map.width
+        assert 0 <= eve.y < env.world_map.height
+
+    def test_eve_spawns_far_from_adam(self):
+        from eve_agent import EveAgent
+        from world_sim import WorldSim
+        env = WorldSim()
+        env.reset()
+        eve = EveAgent(env, device='cpu')
+        eve.birth(adam_x=env.adam_x, adam_y=env.adam_y)
+        dist = abs(eve.x - env.adam_x) + abs(eve.y - env.adam_y)
+        assert dist >= 10, f"Eve spawned too close to Adam (dist={dist})"
+
+    def test_eve_has_separate_brain(self):
+        from eve_agent import EveAgent
+        from world_sim import WorldSim
+        env = WorldSim()
+        env.reset()
+        eve = EveAgent(env, device='cpu')
+        # Eve's model should be a different object than a fresh one
+        assert eve.model is not None
+        # Should have its own parameters
+        params1 = list(eve.model.parameters())
+        assert len(params1) > 0
+
+    def test_eve_has_separate_thought_engine(self):
+        from eve_agent import EveAgent
+        from thought_engine import ThoughtEngine
+        from world_sim import WorldSim
+        env = WorldSim()
+        env.reset()
+        eve = EveAgent(env, device='cpu')
+        assert isinstance(eve.thought_engine, ThoughtEngine)
+
+    def test_eve_can_take_actions(self):
+        from eve_agent import EveAgent
+        from world_sim import WorldSim
+        env = WorldSim()
+        env.reset()
+        eve = EveAgent(env, device='cpu')
+        eve.birth(adam_x=env.adam_x, adam_y=env.adam_y)
+        # Take a few actions
+        for _ in range(5):
+            action, _, _, _ = eve.choose_action(eve.get_world_state())
+            result = eve.step(action, env.adam_x, env.adam_y)
+            assert 'reward' in result
+            assert 'done' in result
+            assert 'thought' in result
+
+    def test_eve_has_own_vocabulary(self):
+        from eve_agent import EveAgent
+        from world_sim import WorldSim
+        env = WorldSim()
+        env.reset()
+        eve = EveAgent(env, device='cpu')
+        eve.birth(adam_x=env.adam_x, adam_y=env.adam_y)
+        # Eve should have starting vocabulary
+        vocab = eve.thought_engine.get_vocabulary()
+        assert len(vocab) > 0
+
+    def test_eve_stats_are_independent(self):
+        from eve_agent import EveAgent
+        from world_sim import WorldSim
+        env = WorldSim()
+        env.reset()
+        eve = EveAgent(env, device='cpu')
+        eve.birth(adam_x=env.adam_x, adam_y=env.adam_y)
+        # Eve's stats should be initialized
+        assert eve.stats['health'] == 100.0
+        assert eve.stats['energy'] == 100.0
+
+    def test_eve_get_stats_for_dashboard(self):
+        from eve_agent import EveAgent
+        from world_sim import WorldSim
+        env = WorldSim()
+        env.reset()
+        eve = EveAgent(env, device='cpu')
+        eve.birth(adam_x=env.adam_x, adam_y=env.adam_y)
+        stats = eve.get_stats()
+        assert stats['name'] == 'Eve'
+        assert stats['alive'] is True
+        assert 'position' in stats
+        assert 'thought' in stats
+        assert 'emotion' in stats
+        assert 'learned_thinking' in stats
+
+    def test_eve_can_die(self):
+        from eve_agent import EveAgent
+        from world_sim import WorldSim
+        env = WorldSim()
+        env.reset()
+        eve = EveAgent(env, device='cpu')
+        eve.birth(adam_x=env.adam_x, adam_y=env.adam_y)
+        # Force death
+        eve.stats['health'] = 0
+        result = eve.step("IDLE", env.adam_x, env.adam_y)
+        assert result['done'] is True
+        assert eve.alive is False
+        assert eve.death_cause is not None
+
+    def test_two_eves_have_different_minds(self):
+        """Two Eve agents should have different initial brain weights."""
+        from eve_agent import EveAgent
+        from world_sim import WorldSim
+        env = WorldSim()
+        env.reset()
+        eve1 = EveAgent(env, device='cpu', name="Eve1")
+        eve1.birth()
+        eve2 = EveAgent(env, device='cpu', name="Eve2")
+        eve2.birth()
+        # Their brain weights should be different
+        params1 = list(eve1.model.parameters())
+        params2 = list(eve2.model.parameters())
+        # At least one parameter should differ
+        any_diff = False
+        for p1, p2 in zip(params1, params2):
+            if not torch.equal(p1, p2):
+                any_diff = True
+                break
+        assert any_diff, "Two agents should have different brain weights"
+
+    def test_eve_senses_adam_when_nearby(self):
+        """Eve should sense Adam's presence when he's nearby."""
+        from eve_agent import EveAgent
+        from world_sim import WorldSim
+        env = WorldSim()
+        env.reset()
+        eve = EveAgent(env, device='cpu')
+        eve.birth()
+        # Place Adam right next to Eve
+        adam_x = eve.x + 1
+        adam_y = eve.y
+        world_state = eve.get_world_state(adam_x, adam_y)
+        assert world_state['other_presence'] > 0
+        assert world_state['other_direction'] != "none"
