@@ -2211,3 +2211,150 @@ class TestReproductionEngine:
         assert status is not None
         assert status["active"] is True
         assert 0 <= status["progress"] <= 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 6 — Mathematical Intuition (quantity, patterns, space, time)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestMathIntuitionEngine:
+    """Tests for the Phase 6 math intuition module."""
+
+    def _make_math(self):
+        from math_intuition import MathIntuitionEngine
+        class MockWorldMap:
+            def __init__(self):
+                self.width = 16
+                self.height = 16
+            def get_biome(self, x, y):
+                return "forest"
+        return MathIntuitionEngine(MockWorldMap(), seed=42)
+
+    def test_food_density_in_range(self):
+        math = self._make_math()
+        d = math.get_food_density(5, 5)
+        assert 0 <= d <= 1.0
+
+    def test_consume_food_drops_density_to_zero(self):
+        math = self._make_math()
+        math.consume_food(5, 5)
+        assert math.get_food_density(5, 5) == 0.0
+
+    def test_food_respawns_after_delay(self):
+        """Food should respawn after estimated_respawn_time ticks."""
+        math = self._make_math()
+        math.consume_food(5, 5)
+        # Not yet respawned
+        math.current_tick = 100
+        assert not math.maybe_respawn_food(5, 5)
+        # After 200+ ticks, should respawn
+        math.current_tick = 250
+        assert math.maybe_respawn_food(5, 5)
+        assert math.get_food_density(5, 5) > 0
+
+    def test_action_outcome_pattern_recorded(self):
+        math = self._make_math()
+        for _ in range(10):
+            math.record_action_outcome("EXPLORE", "found_food", tick_of_day=10, reward=0.5)
+        pattern = math.get_action_pattern("EXPLORE", time_bin=1)  # morning
+        assert pattern["count"] == 10
+        assert pattern["avg_reward"] == 0.5
+
+    def test_best_action_for_time_returns_highest_reward(self):
+        math = self._make_math()
+        # EXPLORE in morning = good
+        for _ in range(10):
+            math.record_action_outcome("EXPLORE", "ok", 10, 0.5)
+        # SLEEP in morning = bad
+        for _ in range(10):
+            math.record_action_outcome("SLEEP", "ok", 10, -0.2)
+        best = math.get_best_action_for_time(time_bin=1, available_actions=["EXPLORE", "SLEEP"])
+        assert best == "EXPLORE"
+
+    def test_seasonal_shift_changes_density(self):
+        """After 5000 ticks, a seasonal shift should occur."""
+        math = self._make_math()
+        initial_season = math.current_season
+        math.step(tick=5000)
+        assert math.current_season != initial_season
+
+    def test_season_cycles_through_four_seasons(self):
+        math = self._make_math()
+        seasons = [math.current_season]
+        for tick in [5000, 10000, 15000, 20000]:
+            math.step(tick=tick)
+            seasons.append(math.current_season)
+        # Should cycle through 0, 1, 2, 3, 0
+        assert seasons == [0, 1, 2, 3, 0]
+
+    def test_visit_count_increments(self):
+        math = self._make_math()
+        math.record_visit(5, 5, tick=10)
+        math.record_visit(5, 5, tick=20)
+        math.record_visit(5, 5, tick=30)
+        assert math.get_visit_count(5, 5) == 3
+
+    def test_tile_value_recorded(self):
+        math = self._make_math()
+        math.record_tile_value(5, 5, 1.0)
+        assert math.get_tile_value(5, 5) > 0
+
+    def test_find_known_food_tiles(self):
+        """Should return tiles with positive value within max_distance."""
+        math = self._make_math()
+        math.record_tile_value(5, 5, 1.0)
+        math.record_tile_value(6, 5, 0.8)
+        math.record_tile_value(15, 15, 0.5)  # far away
+        known = math.find_known_food_tiles(max_distance=5, from_pos=(5, 5))
+        assert len(known) >= 2  # (5,5) and (6,5)
+
+    def test_internal_clock_signal(self):
+        math = self._make_math()
+        clock = math.get_internal_clock_signal(tick=100)
+        assert "day_progress" in clock
+        assert "is_night" in clock
+        assert "season" in clock
+        assert "season_name" in clock
+        assert 0 <= clock["day_progress"] <= 1
+
+    def test_respawn_estimate_updates(self):
+        """Estimated respawn time should update based on observations."""
+        math = self._make_math()
+        initial = math.estimated_respawn_time
+        math.update_respawn_estimate(250)
+        assert math.estimated_respawn_time != initial
+
+    def test_sensory_extensions_returned(self):
+        math = self._make_math()
+        ext = math.get_sensory_extensions(5, 5, tick=100)
+        required = {"food_density", "visit_count", "tile_value", "day_progress",
+                    "is_night", "season", "season_name", "estimated_respawn_time"}
+        assert set(ext.keys()) == required
+
+    def test_tile_value_decays_over_time(self):
+        """Old tile values should fade when decay_tile_values is called."""
+        math = self._make_math()
+        math.record_tile_value(5, 5, 1.0)
+        initial = math.get_tile_value(5, 5)
+        for _ in range(20):
+            math.decay_tile_values()
+        final = math.get_tile_value(5, 5)
+        assert final < initial
+
+    def test_serialization_round_trip(self):
+        math = self._make_math()
+        math.record_visit(5, 5, tick=10)
+        math.record_tile_value(5, 5, 0.8)
+        math.consume_food(5, 5)
+        state = math.to_dict()
+        from math_intuition import MathIntuitionEngine
+        class MockWorldMap:
+            def __init__(self):
+                self.width = 16
+                self.height = 16
+            def get_biome(self, x, y):
+                return "forest"
+        math2 = MathIntuitionEngine(MockWorldMap(), seed=42)
+        math2.load_state(state)
+        assert math2.get_visit_count(5, 5) == 1
+        assert math2.get_food_density(5, 5) == 0.0  # was consumed
