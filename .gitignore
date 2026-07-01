@@ -19,6 +19,8 @@ vocab_log.jsonl
 vocab_convergence.jsonl
 generations.jsonl
 first_contact.jsonl
+culture_events.jsonl
+vocab_extinctions.jsonl
 observation_results.json
 run*.log
 server.log

@@ -2841,3 +2841,178 @@ class TestSocialEngine:
             social.update_relationship("adam", "eve", "share", tick=200)
         rel = social.get_relationship("adam", "eve")
         assert rel["relation_type"] == "TRUSTED"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 9 — Culture & Transmission
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestCultureEngine:
+    """Tests for the Phase 9 culture module."""
+
+    def _make_culture(self, tmp_path):
+        from culture import CultureEngine
+        return CultureEngine(seed=42, log_path=str(tmp_path / "culture.jsonl"))
+
+    def test_observation_eat_positive_reward(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        learned = culture.record_observation(
+            "baby", "adam", "EAT", "blue_berry", 0.5, 0.7, 100,
+        )
+        assert learned["learned"]
+        assert learned["type"] == "food_preference"
+        assert culture.get_food_preference("baby", "blue_berry") > 0
+
+    def test_observation_eat_negative_reward(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        culture.record_observation("baby", "adam", "EAT", "red_berry", -0.5, 0.7, 100)
+        assert culture.get_food_preference("baby", "red_berry") < 0
+
+    def test_observation_flee_positive_reward(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        culture.record_observation("baby", "adam", "FLEE", "desert", 0.3, 0.5, 100)
+        assert culture.get_fear_trigger("baby", "desert") > 0
+
+    def test_trust_affects_learning_rate(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        culture.record_observation("a", "b", "EAT", "berry", 0.5, 0.9, 100)
+        culture.record_observation("c", "b", "EAT", "berry", 0.5, 0.1, 100)
+        assert culture.get_food_preference("a", "berry") > culture.get_food_preference("c", "berry")
+
+    def test_cultural_signature_computed(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        culture.record_observation("adam", "p", "EAT", "berry", 0.5, 0.9, 100)
+        sig = culture.update_cultural_signature("adam")
+        assert "food_preferences" in sig
+        assert "fear_triggers" in sig
+        assert "behavior_patterns" in sig
+
+    def test_cultural_distance_zero_for_same_agent(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        culture.update_cultural_signature("adam")
+        assert culture.compute_cultural_distance("adam", "adam") == 0.0
+
+    def test_cultural_distance_positive_for_different_agents(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        # Different food preferences
+        for _ in range(5):
+            culture.record_observation("adam", "p", "EAT", "berry", 0.5, 0.9, 100)
+            culture.record_observation("eve", "p", "EAT", "fish", 0.5, 0.9, 100)
+        culture.update_cultural_signature("adam")
+        culture.update_cultural_signature("eve")
+        d = culture.compute_cultural_distance("adam", "eve")
+        assert d > 0
+
+    def test_shelter_discovery_logged_once(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        event = culture.detect_shelter_use("adam", "cave", "SLEEP", 28.0, 500, (5, 5))
+        assert event is not None
+        assert event["event_type"] == "shelter_discovery"
+        # Second discovery → None
+        event2 = culture.detect_shelter_use("eve", "cave", "SLEEP", 28.0, 600)
+        assert event2 is None
+
+    def test_no_shelter_discovery_when_warm(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        event = culture.detect_shelter_use("adam", "cave", "SLEEP", 38.0, 500)
+        assert event is None  # body temp too high
+
+    def test_no_shelter_discovery_when_not_sleeping(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        event = culture.detect_shelter_use("adam", "cave", "MOVE", 28.0, 500)
+        assert event is None
+
+    def test_fire_use_logged(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        event = culture.detect_fire_use("adam", 1, 30.0, 22, 700)
+        assert event is not None
+        assert event["event_type"] == "fire_use"
+
+    def test_no_fire_use_during_day(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        event = culture.detect_fire_use("adam", 1, 30.0, 12, 700)
+        assert event is None
+
+    def test_cooking_discovery_logged(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        event = culture.detect_cooking("adam", "cooked_meat", 800)
+        assert event is not None
+
+    def test_no_cooking_for_raw_food(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        event = culture.detect_cooking("adam", "raw_meat", 800)
+        assert event is None
+
+    def test_word_invention_recorded(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        culture.record_word_invention("cold pain", "adam", 100, generation=1)
+        assert "cold pain" in culture.vocabulary_lineage
+
+    def test_word_invention_only_once(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        culture.record_word_invention("test", "adam", 100, 1)
+        original_tick = culture.vocabulary_lineage["test"]["origin_tick"]
+        culture.record_word_invention("test", "eve", 200, 1)
+        # Should not overwrite original
+        assert culture.vocabulary_lineage["test"]["origin_tick"] == original_tick
+        assert culture.vocabulary_lineage["test"]["originator"] == "adam"
+
+    def test_vocab_extinction_after_threshold(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        culture.record_word_invention("old_word", "adam", 100, 1)
+        # 2000 ticks later, threshold 1000 → extinct
+        extinctions = culture.check_vocab_extinction(2100, extinction_threshold=1000)
+        assert len(extinctions) == 1
+        assert extinctions[0]["word"] == "old_word"
+
+    def test_vocab_survives_when_used_recently(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        culture.record_word_invention("alive", "adam", 100, 1)
+        culture.record_word_used("alive", 1900)  # used recently
+        extinctions = culture.check_vocab_extinction(2000, extinction_threshold=1000)
+        # "alive" was used at 1900, 2000-1900 = 100 < 1000 → survives
+        assert len(extinctions) == 0
+
+    def test_vocab_transfer_to_child_too_young(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        culture.record_word_invention("test", "adam", 100, 1)
+        result = culture.transfer_vocabulary_to_child(
+            "adam", "baby", ["test"], child_age_ticks=500, tick=600,
+        )
+        assert not result["transferred"]
+
+    def test_vocab_transfer_to_child_old_enough(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        culture.record_word_invention("test", "adam", 100, 1)
+        result = culture.transfer_vocabulary_to_child(
+            "adam", "baby", ["test"], child_age_ticks=900, tick=1000,
+        )
+        assert result["transferred"]
+        assert result["words_transferred"] == 1
+
+    def test_vocab_lineage_summary(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        culture.record_word_invention("a", "adam", 100, 1)
+        culture.record_word_invention("b", "eve", 110, 1)
+        culture.check_vocab_extinction(2100, extinction_threshold=1000)
+        summary = culture.get_vocab_lineage_summary()
+        assert summary["total_words"] == 2
+        assert summary["extinct"] >= 1
+
+    def test_surviving_words_by_generation(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        culture.record_word_invention("gen1_word", "adam", 100, 1)
+        culture.record_word_invention("gen2_word", "baby", 200, 2)
+        culture.record_word_used("gen1_word", 1000)
+        culture.record_word_used("gen2_word", 1000)
+        surviving = culture.get_surviving_words_by_generation()
+        assert 1 in surviving
+        assert 2 in surviving
+
+    def test_summary(self, tmp_path):
+        culture = self._make_culture(tmp_path)
+        culture.record_observation("adam", "p", "EAT", "berry", 0.5, 0.9, 100)
+        culture.record_word_invention("test", "adam", 100, 1)
+        summary = culture.get_summary()
+        assert "total_agents_with_preferences" in summary
+        assert "vocab_total" in summary
