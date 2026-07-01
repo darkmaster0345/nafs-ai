@@ -1506,3 +1506,286 @@ class TestChemistryEngine:
         # Food should be consumed
         assert not sim.chemistry.has_food_at(sim.adam_x, sim.adam_y)
         assert len(sim.chemistry.stomach) == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 3 — Biology Engine (metabolism, aging, immune, injury, sleep)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestBiologyEngine:
+    """Tests for the Phase 3 biology module."""
+
+    def _make_bio(self):
+        from biology import BiologyEngine
+        return BiologyEngine(seed=42)
+
+    def test_initial_metabolic_state(self):
+        bio = self._make_bio()
+        assert bio.glucose == 80.0
+        assert bio.fat == 50.0
+        assert bio.protein == 70.0
+        assert bio.hydration == 80.0
+        assert bio.body_mass > 0
+
+    def test_initial_life_stage_newborn(self):
+        bio = self._make_bio()
+        assert bio.life_stage == "newborn"
+        assert bio.age_ticks == 0
+
+    def test_glucose_drains_with_action(self):
+        bio = self._make_bio()
+        for _ in range(100):
+            bio.step(tick=bio.current_tick + 1, action="MOVE", time_of_day=12)
+        assert bio.glucose < 80.0
+
+    def test_food_digestion_replenishes_nutrients(self):
+        bio = self._make_bio()
+        bio.glucose = 30.0
+        bio.protein = 50.0
+        bio.hydration = 50.0
+        bio.digest_food({
+            "calories": 60, "protein": 30, "fat": 5, "water_content": 20,
+        })
+        assert bio.glucose > 30.0
+        assert bio.protein > 50.0
+        assert bio.hydration > 50.0
+
+    def test_different_foods_replenish_different_nutrients(self):
+        """Fish should add more protein than berries."""
+        from biology import BiologyEngine
+        bio_fish = BiologyEngine(seed=42)
+        bio_fish.protein = 50.0
+        bio_fish.digest_food({"calories": 60, "protein": 30, "fat": 5, "water_content": 20})
+        fish_protein_gain = bio_fish.protein - 50.0
+
+        bio_berry = BiologyEngine(seed=42)
+        bio_berry.protein = 50.0
+        bio_berry.digest_food({"calories": 15, "protein": 0, "fat": 0, "water_content": 8})
+        berry_protein_gain = bio_berry.protein - 50.0
+
+        assert fish_protein_gain > berry_protein_gain
+
+    def test_starvation_sequence_glucose_to_fat(self):
+        """When glucose is low, fat should be converted to glucose."""
+        bio = self._make_bio()
+        bio.glucose = 5.0
+        bio.fat = 50.0
+        bio.step(tick=1, action="IDLE", time_of_day=12)
+        # Fat should have been consumed
+        assert bio.fat < 50.0
+
+    def test_starvation_sequence_fat_to_protein(self):
+        """When glucose AND fat are low, protein should be consumed."""
+        bio = self._make_bio()
+        bio.glucose = 5.0
+        bio.fat = 5.0
+        bio.protein = 70.0
+        bio.step(tick=1, action="IDLE", time_of_day=12)
+        assert bio.protein < 70.0
+
+    def test_severe_starvation_causes_health_drain(self):
+        """When all metabolic reserves are low, health should drain."""
+        bio = self._make_bio()
+        bio.glucose = 1.0
+        bio.fat = 1.0
+        bio.protein = 1.0
+        update = bio.step(tick=1, action="IDLE", time_of_day=12)
+        assert update["metabolism"]["health_drain"] > 0
+        assert update["metabolism"]["is_starving"]
+
+    def test_dehydration_accelerates_drains(self):
+        """Dehydration should accelerate metabolic drain rates."""
+        bio_wet = self._make_bio()
+        bio_wet.hydration = 80.0
+        bio_wet.glucose = 80.0
+        for _ in range(50):
+            bio_wet.step(tick=bio_wet.current_tick + 1, action="MOVE", time_of_day=12)
+        wet_drain = 80.0 - bio_wet.glucose
+
+        bio_dry = self._make_bio()
+        bio_dry.hydration = 20.0  # dehydrated
+        bio_dry.glucose = 80.0
+        for _ in range(50):
+            bio_dry.step(tick=bio_dry.current_tick + 1, action="MOVE", time_of_day=12)
+        dry_drain = 80.0 - bio_dry.glucose
+
+        assert dry_drain > wet_drain
+
+    def test_life_stages_progression(self):
+        from biology import BiologyEngine
+        bio = BiologyEngine(seed=42)
+        stages_seen = ["newborn"]
+        for tick_target in [200, 800, 2000, 6000, 10000]:
+            bio.age_ticks = tick_target
+            bio._update_life_stage()
+            stages_seen.append(bio.life_stage)
+        assert stages_seen == ["newborn", "child", "adolescent", "adult", "elder", "ancient"]
+
+    def test_only_adults_can_reproduce(self):
+        from biology import BiologyEngine
+        bio = BiologyEngine(seed=42)
+        bio.age_ticks = 100
+        bio._update_life_stage()
+        assert not bio.can_reproduce()
+        bio.age_ticks = 3000
+        bio._update_life_stage()
+        assert bio.can_reproduce()
+        bio.age_ticks = 7000
+        bio._update_life_stage()
+        assert not bio.can_reproduce()
+
+    def test_immunity_builds_from_exposure(self):
+        bio = self._make_bio()
+        dmg1 = bio.expose_to_disease("swamp_fever")
+        assert bio.get_immunity("swamp_fever") > 0
+        dmg2 = bio.expose_to_disease("swamp_fever")
+        assert dmg2 < dmg1  # less damage after building immunity
+
+    def test_immunity_inheritance(self):
+        """Offspring should get partial immunity (50%)."""
+        bio = self._make_bio()
+        bio.expose_to_disease("swamp_fever")
+        bio.expose_to_disease("swamp_fever")
+        parent_immunity = bio.get_immunity("swamp_fever")
+        inherited = bio.get_inherited_immunity()
+        assert inherited["swamp_fever"] == parent_immunity * 0.5
+
+    def test_injury_states_progress(self):
+        from biology import INJURY_NONE, INJURY_BRUISED, INJURY_WOUNDED, INJURY_CRITICAL
+        bio = self._make_bio()
+        assert bio.injury_level == INJURY_NONE
+        bio.apply_injury(INJURY_BRUISED, tick=10)
+        assert bio.injury_level == INJURY_BRUISED
+        bio.apply_injury(INJURY_WOUNDED, tick=20)
+        assert bio.injury_level == INJURY_WOUNDED
+        bio.apply_injury(INJURY_CRITICAL, tick=30)
+        assert bio.injury_level == INJURY_CRITICAL
+
+    def test_injury_does_not_downgrade(self):
+        """Applying a lesser injury shouldn't reduce current level."""
+        from biology import INJURY_WOUNDED, INJURY_BRUISED
+        bio = self._make_bio()
+        bio.apply_injury(INJURY_WOUNDED, tick=10)
+        bio.apply_injury(INJURY_BRUISED, tick=20)
+        assert bio.injury_level == INJURY_WOUNDED
+
+    def test_wounded_reduces_speed(self):
+        from biology import INJURY_WOUNDED
+        bio = self._make_bio()
+        bio.apply_injury(INJURY_WOUNDED, tick=10)
+        assert bio.get_movement_speed_mult() == 0.6  # -40% speed
+
+    def test_wounded_increases_energy_cost(self):
+        from biology import INJURY_WOUNDED
+        bio = self._make_bio()
+        bio.apply_injury(INJURY_WOUNDED, tick=10)
+        assert bio.get_energy_cost_mult() == 1.3  # +30% energy
+
+    def test_injury_recovers_over_time(self):
+        from biology import INJURY_WOUNDED
+        bio = self._make_bio()
+        bio.apply_injury(INJURY_WOUNDED, tick=10)
+        for tick in range(11, 350):
+            bio.step(tick=tick, action="IDLE", time_of_day=12)
+        assert bio.injury_level < INJURY_WOUNDED
+
+    def test_injury_recovers_faster_in_shelter(self):
+        from biology import INJURY_WOUNDED
+        bio = self._make_bio()
+        bio.apply_injury(INJURY_WOUNDED, tick=10)
+        # Shelter halves recovery time (150 ticks instead of 300)
+        for tick in range(11, 200):
+            bio.step(tick=tick, action="IDLE", time_of_day=12, in_shelter=True)
+        assert bio.injury_level < INJURY_WOUNDED
+
+    def test_rem_sleep_first_100_ticks(self):
+        """First 100 ticks of sleep should be REM."""
+        bio = self._make_bio()
+        for tick in range(1, 50):
+            bio.step(tick=tick, action="SLEEP", time_of_day=0)
+        assert bio.sleep_state == "REM"
+
+    def test_deep_sleep_after_rem(self):
+        """After 100 ticks of sleep, should enter deep sleep."""
+        bio = self._make_bio()
+        for tick in range(1, 150):
+            bio.step(tick=tick, action="SLEEP", time_of_day=0)
+        assert bio.sleep_state == "deep"
+
+    def test_sleep_debt_accumulates_when_awake(self):
+        bio = self._make_bio()
+        for tick in range(1, 100):
+            bio.step(tick=tick, action="IDLE", time_of_day=12)
+        assert bio.sleep_debt > 0
+
+    def test_hallucination_from_sleep_deprivation(self):
+        """3000+ ticks awake should cause hallucinations."""
+        bio = self._make_bio()
+        for tick in range(1, 3001):
+            bio.step(tick=tick, action="IDLE", time_of_day=12)
+        assert bio.is_hallucinating()
+
+    def test_sleep_reduces_debt(self):
+        bio = self._make_bio()
+        bio.sleep_debt = 50.0
+        for tick in range(1, 100):
+            bio.step(tick=tick, action="SLEEP", time_of_day=0)
+        assert bio.sleep_debt < 50.0
+
+    def test_circadian_night_extra_debt(self):
+        """Night time should add extra sleep debt."""
+        bio_day = self._make_bio()
+        for tick in range(1, 100):
+            bio_day.step(tick=tick, action="IDLE", time_of_day=12)
+        day_debt = bio_day.sleep_debt
+
+        bio_night = self._make_bio()
+        for tick in range(1, 100):
+            bio_night.step(tick=tick, action="IDLE", time_of_day=22)
+        night_debt = bio_night.sleep_debt
+
+        assert night_debt > day_debt
+
+    def test_sensory_extensions_returned(self):
+        bio = self._make_bio()
+        ext = bio.get_sensory_extensions()
+        required = {"glucose", "fat", "protein", "hydration", "body_mass",
+                    "age_ticks", "life_stage", "injury_level", "injury_name",
+                    "immunity_avg", "sleep_debt", "sleep_state", "hallucinating",
+                    "stat_mult"}
+        assert set(ext.keys()) == required
+
+    def test_hunger_energy_equivalents(self):
+        """Biology should translate to legacy hunger/energy stats."""
+        bio = self._make_bio()
+        hunger = bio.get_hunger_equivalent()
+        energy = bio.get_energy_equivalent()
+        thirst = bio.get_thirst_equivalent()
+        assert 0 <= hunger <= 100
+        assert 0 <= energy <= 100
+        assert 0 <= thirst <= 100
+
+    def test_world_sim_integrates_biology(self):
+        """WorldSim should instantiate BiologyEngine and expose sensory fields."""
+        from world_sim import WorldSim
+        sim = WorldSim()
+        assert sim.biology is not None
+        state, _ = sim.reset()
+        assert "glucose" in state
+        assert "life_stage" in state
+        assert "sleep_debt" in state
+        assert "injury_level" in state
+
+    def test_world_sim_eating_feeds_biology(self):
+        """EAT action should update biology's metabolic state."""
+        from world_sim import WorldSim
+        sim = WorldSim()
+        sim.reset()
+        # Force low glucose
+        sim.biology.glucose = 30.0
+        initial_glucose = sim.biology.glucose
+        # Spawn food at Adam's location
+        sim.chemistry.spawn_food_at(sim.current_biome, sim.adam_x, sim.adam_y,
+                                     force_type="fish")
+        sim.step("EAT")
+        assert sim.biology.glucose > initial_glucose

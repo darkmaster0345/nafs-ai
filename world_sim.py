@@ -32,6 +32,13 @@ try:
 except ImportError:
     CHEMISTRY_AVAILABLE = False
 
+# Phase 3: Biology Engine integration
+try:
+    from biology import BiologyEngine, INJURY_NONE, INJURY_BRUISED, INJURY_WOUNDED, INJURY_CRITICAL
+    BIOLOGY_AVAILABLE = True
+except ImportError:
+    BIOLOGY_AVAILABLE = False
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Biome Definitions — Each biome has unique survival characteristics
@@ -430,6 +437,10 @@ class WorldSim:
         if CHEMISTRY_AVAILABLE and self.physics is not None:
             self.chemistry = ChemistryEngine(self.physics)
 
+        # Phase 3: Biology Engine (metabolism, aging, immune, injury, sleep)
+        # One instance per WorldSim. Represents Adam's body.
+        self.biology = BiologyEngine() if BIOLOGY_AVAILABLE else None
+
     def reset(self):
         """
         Initialize Adam's one and only life.
@@ -472,6 +483,11 @@ class WorldSim:
                 fy = (self.adam_y + random.randint(-5, 5)) % self.world_map.height
                 biome_here = self.world_map.get_biome(fx, fy)
                 self.chemistry.spawn_food_at(biome_here, fx, fy)
+
+        # Phase 3: Reset biology engine for new life
+        if self.biology is not None:
+            from biology import BiologyEngine
+            self.biology = BiologyEngine()
 
         return self._get_world_state(), self.adam_stats.to_dict()
 
@@ -566,6 +582,10 @@ class WorldSim:
         if self.chemistry is not None:
             state.update(self.chemistry.get_sensory_extensions(self.adam_x, self.adam_y))
 
+        # Phase 3: Biology sensory extensions (metabolism, age, injury, sleep)
+        if self.biology is not None:
+            state.update(self.biology.get_sensory_extensions())
+
         return state
 
     def step(self, action: str):
@@ -633,6 +653,26 @@ class WorldSim:
                 self.adam_stats.health -= illness["health_drain"]
             if illness["energy_drain"] > 0:
                 self.adam_stats.energy -= illness["energy_drain"]
+
+        # Phase 3: Update biology engine (metabolism, aging, sleep, injury)
+        if self.biology is not None:
+            in_shelter = (self.current_biome == "cave" or
+                          self.world_events.get('shelter_nearby', 0) > 0.5)
+            bio_update = self.biology.step(
+                tick=self.current_tick, action=action,
+                time_of_day=self.time_of_day, in_shelter=in_shelter,
+            )
+            # Apply metabolism health drain (starvation/dehydration)
+            metabolism = bio_update["metabolism"]
+            if metabolism["health_drain"] > 0:
+                self.adam_stats.health -= metabolism["health_drain"]
+            # Translate metabolic state to legacy stats (hunger/energy)
+            # This keeps backward compat with thought engine and dashboard
+            self.adam_stats.hunger = self.biology.get_hunger_equivalent()
+            self.adam_stats.energy = self.biology.get_energy_equivalent()
+            # Hallucination penalty
+            if bio_update["sleep"]["hallucinating"]:
+                self.adam_stats.stress += 0.2  # hallucinations are stressful
 
         # --- Update world events based on biome ---
         food_prob = random.uniform(0.05, 0.15) * biome["food_chance"] / 0.1
@@ -729,6 +769,7 @@ class WorldSim:
         
         elif action == "EAT":
             # Phase 2: Chemistry-based eating
+            # Phase 3: Biology digests the food → metabolic state
             ate_food = False
             if self.chemistry is not None and self.chemistry.has_food_at(self.adam_x, self.adam_y):
                 food_info = self.chemistry.get_food_at(self.adam_x, self.adam_y)
@@ -745,6 +786,9 @@ class WorldSim:
                     # The last appended entry is for this food
                     last = self.chemistry.pending_toxicity[-1]
                     self.chemistry.pending_toxicity[-1] = (last[0], eff_tox, last[2])
+                # Phase 3: Biology digests food → updates glucose/fat/protein/hydration
+                if self.biology is not None:
+                    self.biology.digest_food(result)
                 # Apply immediate nutrition (calories reduce hunger)
                 food_value = result.get("calories", 30) * 0.5  # calories → hunger reduction
                 self.adam_stats.hunger = max(0.0, self.adam_stats.hunger - food_value)
@@ -774,6 +818,7 @@ class WorldSim:
 
         elif action == "DRINK":
             # Phase 2: Chemistry-based drinking (water quality matters)
+            # Phase 3: Biology updates hydration
             drank = False
             if self.chemistry is not None:
                 # Determine water source based on biome + physics water tiles
@@ -791,6 +836,9 @@ class WorldSim:
                     drink_value = result["hydration"] * 0.5  # hydration → hunger reduction
                     self.adam_stats.hunger = max(0.0, self.adam_stats.hunger - drink_value)
                     self.adam_stats.stress = max(0.0, self.adam_stats.stress - 5.0)
+                    # Phase 3: Biology updates hydration
+                    if self.biology is not None:
+                        self.biology.drink_water(result["hydration"])
                     if result.get("immediate_illness"):
                         reward -= 0.5  # ocean = bad
                     else:
@@ -887,8 +935,20 @@ class WorldSim:
                     self.adam_stats.health -= fall_dmg
                     self.adam_stats.pain = min(10.0, self.adam_stats.pain + fall_dmg * 0.5)
                     reward -= fall_dmg * 0.05  # small negative reward for getting hurt
+                    # Phase 3: Apply injury based on fall damage
+                    if self.biology is not None:
+                        from biology import INJURY_BRUISED, INJURY_WOUNDED, INJURY_CRITICAL
+                        if fall_dmg >= 15:
+                            self.biology.apply_injury(INJURY_CRITICAL, self.current_tick)
+                        elif fall_dmg >= 10:
+                            self.biology.apply_injury(INJURY_WOUNDED, self.current_tick)
+                        elif fall_dmg >= 5:
+                            self.biology.apply_injury(INJURY_BRUISED, self.current_tick)
             else:
                 move_cost = base_move_cost
+            # Phase 3: Apply injury energy penalty
+            if self.biology is not None:
+                move_cost *= self.biology.get_energy_cost_mult()
             self.adam_stats.energy -= move_cost
 
             self.adam_x = new_x
