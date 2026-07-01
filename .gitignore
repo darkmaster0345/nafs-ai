@@ -18,6 +18,7 @@ vocab_divergence.jsonl
 vocab_log.jsonl
 vocab_convergence.jsonl
 generations.jsonl
+first_contact.jsonl
 observation_results.json
 run*.log
 server.log

@@ -2358,3 +2358,273 @@ class TestMathIntuitionEngine:
         math2.load_state(state)
         assert math2.get_visit_count(5, 5) == 1
         assert math2.get_food_density(5, 5) == 0.0  # was consumed
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 7 — First Contact & Interaction
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestFirstContactEngine:
+    """Tests for the Phase 7 first contact module."""
+
+    def _make_fc(self, tmp_path):
+        from first_contact import FirstContactEngine
+        return FirstContactEngine(seed=42, log_path=str(tmp_path / "fc.jsonl"))
+
+    def test_first_contact_detected_within_5_tiles(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        event = fc.check_first_contact(
+            adam_pos=(5, 5), eve_pos=(7, 7),
+            adam_vocab_size=24, eve_vocab_size=20, tick=100,
+        )
+        assert event is not None
+        assert event["distance"] == 4
+        assert event["adam_vocabulary_size"] == 24
+
+    def test_first_contact_not_triggered_when_too_far(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        event = fc.check_first_contact(
+            adam_pos=(0, 0), eve_pos=(10, 10),
+            adam_vocab_size=20, eve_vocab_size=18, tick=100,
+        )
+        assert event is None
+
+    def test_first_contact_only_once(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        fc.check_first_contact((5, 5), (6, 6), 20, 18, tick=100)
+        event2 = fc.check_first_contact((5, 5), (6, 6), 25, 19, tick=200)
+        assert event2 is None
+
+    def test_other_agent_signal_within_range(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        signal = fc.get_other_agent_signal(
+            observer_pos=(5, 5), other_pos=(5, 7),
+            other_state={"life_stage": "adult", "movement_state": "moving"},
+        )
+        assert signal["other_presence"] > 0
+        assert signal["other_direction"] == "S"
+        assert signal["other_size"] == 1.0
+
+    def test_other_agent_signal_out_of_range(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        signal = fc.get_other_agent_signal((0, 0), (20, 20))
+        assert signal["other_presence"] == 0.0
+
+    def test_other_agent_signal_direction(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        # North
+        s = fc.get_other_agent_signal((5, 5), (5, 3))
+        assert s["other_direction"] == "N"
+        # East
+        s = fc.get_other_agent_signal((5, 5), (7, 5))
+        assert s["other_direction"] == "E"
+
+    def test_action_unlocked_at_adolescent(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        assert not fc.is_action_unlocked("APPROACH", "newborn")
+        assert not fc.is_action_unlocked("APPROACH", "child")
+        assert fc.is_action_unlocked("APPROACH", "adolescent")
+        assert fc.is_action_unlocked("APPROACH", "adult")
+
+    def test_observe_action_unlocked_for_children(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        assert fc.is_action_unlocked("OBSERVE", "child")
+
+    def test_observe_gives_small_reward(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        result = fc.execute_interaction(
+            action="OBSERVE",
+            actor_id="adam", actor_pos=(5, 5),
+            actor_state={"life_stage": "adult"},
+            target_id="eve", target_pos=(7, 7),
+            target_state={"life_stage": "adult", "hunger": 60},
+            tick=100,
+        )
+        assert result["success"]
+        assert result["reward"] > 0
+
+    def test_approach_moves_toward_target(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        result = fc.execute_interaction(
+            action="APPROACH",
+            actor_id="adam", actor_pos=(5, 5),
+            actor_state={"life_stage": "adult"},
+            target_id="eve", target_pos=(7, 7),
+            target_state={"life_stage": "adult"},
+            tick=100,
+        )
+        assert result["success"]
+        assert result["new_position"] is not None
+        # Should move closer
+        new_dist = abs(result["new_position"][0] - 7) + abs(result["new_position"][1] - 7)
+        assert new_dist < 4  # was 4 tiles away
+
+    def test_share_when_target_hungry_gives_high_reward(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        result = fc.execute_interaction(
+            action="SHARE",
+            actor_id="adam", actor_pos=(5, 5),
+            actor_state={"life_stage": "adult"},
+            target_id="eve", target_pos=(5, 6),
+            target_state={"life_stage": "adult", "hunger": 70},
+            tick=100,
+        )
+        assert result["reward"] == 0.5
+        assert result["target_reward"] == 0.3
+
+    def test_share_when_target_not_hungry(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        result = fc.execute_interaction(
+            action="SHARE",
+            actor_id="adam", actor_pos=(5, 5),
+            actor_state={"life_stage": "adult"},
+            target_id="eve", target_pos=(5, 6),
+            target_state={"life_stage": "adult", "hunger": 20},
+            tick=100,
+        )
+        assert result["reward"] < 0.5  # less reward
+
+    def test_flee_agent_moves_away(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        result = fc.execute_interaction(
+            action="FLEE_AGENT",
+            actor_id="adam", actor_pos=(5, 5),
+            actor_state={"life_stage": "adult"},
+            target_id="eve", target_pos=(5, 6),
+            target_state={"life_stage": "adult"},
+            tick=100,
+        )
+        assert result["success"]
+        assert result["new_position"] is not None
+
+    def test_action_locked_for_baby(self, tmp_path):
+        """Babies (newborn) cannot use interaction actions."""
+        fc = self._make_fc(tmp_path)
+        result = fc.execute_interaction(
+            action="APPROACH",
+            actor_id="baby", actor_pos=(5, 5),
+            actor_state={"life_stage": "newborn"},
+            target_id="eve", target_pos=(5, 6),
+            target_state={"life_stage": "adult"},
+            tick=100,
+        )
+        assert not result["success"]
+        assert result["info"]["reason"] == "action_locked"
+
+    def test_trust_increases_with_positive_interactions(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        initial = fc.get_trust("adam", "eve")
+        fc.execute_interaction(
+            action="OBSERVE",
+            actor_id="adam", actor_pos=(5, 5),
+            actor_state={"life_stage": "adult"},
+            target_id="eve", target_pos=(7, 7),
+            target_state={"life_stage": "adult", "hunger": 60},
+            tick=100,
+        )
+        after = fc.get_trust("adam", "eve")
+        assert after > initial
+
+    def test_trust_decreases_with_negative_interactions(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        # Build up some trust first
+        fc.execute_interaction(
+            action="SHARE",
+            actor_id="adam", actor_pos=(5, 5),
+            actor_state={"life_stage": "adult"},
+            target_id="eve", target_pos=(5, 6),
+            target_state={"life_stage": "adult", "hunger": 70},
+            tick=100,
+        )
+        trust_before = fc.get_trust("adam", "eve")
+        # Flee (negative)
+        fc.execute_interaction(
+            action="FLEE_AGENT",
+            actor_id="eve", actor_pos=(5, 6),
+            actor_state={"life_stage": "adult"},
+            target_id="adam", target_pos=(5, 5),
+            target_state={"life_stage": "adult"},
+            tick=110,
+        )
+        trust_after = fc.get_trust("adam", "eve")
+        assert trust_after < trust_before
+
+    def test_trust_labels(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        assert fc.get_trust_label(0.7) == "TRUSTED"
+        assert fc.get_trust_label(0.3) == "FAMILIAR"
+        assert fc.get_trust_label(0.0) == "STRANGER"
+        assert fc.get_trust_label(-0.3) == "DISTRUSTED"
+        assert fc.get_trust_label(-0.7) == "HOSTILE"
+
+    def test_vocabulary_contact_within_2_tiles(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        result = fc.check_vocabulary_contact(
+            adam_pos=(5, 5), eve_pos=(5, 6),
+            adam_dialogue="cold.", eve_dialogue="hungry.",
+            tick=100,
+        )
+        assert result["in_contact"]
+        assert result["adam_heard"] == "hungry."
+        assert result["eve_heard"] == "cold."
+
+    def test_vocabulary_contact_out_of_range(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        result = fc.check_vocabulary_contact(
+            adam_pos=(0, 0), eve_pos=(10, 10),
+            adam_dialogue="x", eve_dialogue="y",
+            tick=100,
+        )
+        assert not result["in_contact"]
+
+    def test_heard_dialogues_recorded(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        fc.check_vocabulary_contact(
+            (5, 5), (5, 6), "hello", "world", tick=100,
+        )
+        heard = fc.get_heard_dialogues("adam")
+        assert len(heard) == 1
+        assert heard[0]["dialogue"] == "world"
+
+    def test_total_vocab_contact_ticks_tracked(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        for tick in range(100, 110):
+            fc.check_vocabulary_contact(
+                (5, 5), (5, 6), "x", "y", tick=tick,
+            )
+        total = fc.get_total_vocab_contact_ticks("adam", "eve")
+        assert total == 10
+
+    def test_relationship_summary(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        fc.execute_interaction(
+            action="OBSERVE",
+            actor_id="adam", actor_pos=(5, 5),
+            actor_state={"life_stage": "adult"},
+            target_id="eve", target_pos=(7, 7),
+            target_state={"life_stage": "adult", "hunger": 60},
+            tick=100,
+        )
+        summary = fc.get_relationship_summary("adam", "eve")
+        assert summary["total_interactions"] == 1
+        assert summary["positive_interactions"] == 1
+        assert summary["trust_label"] in ("FAMILIAR", "STRANGER", "TRUSTED")
+
+    def test_sensory_extensions_returned(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        ext = fc.get_sensory_extensions(
+            observer_id="adam", observer_pos=(5, 5),
+            other_id="eve", other_pos=(5, 7),
+            other_state={"life_stage": "adult", "movement_state": "idle"},
+        )
+        required = {"other_presence", "other_distance", "other_direction",
+                    "other_size", "other_movement_state", "trust_score",
+                    "trust_label", "vocab_contact_ticks"}
+        assert set(ext.keys()) == required
+
+    def test_summary(self, tmp_path):
+        fc = self._make_fc(tmp_path)
+        fc.check_first_contact((5, 5), (6, 6), 20, 18, tick=100)
+        summary = fc.get_summary()
+        assert summary["first_contact_happened"]
+        assert summary["first_contact_tick"] == 100
