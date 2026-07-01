@@ -17,6 +17,7 @@ life_log_eve.json
 vocab_divergence.jsonl
 vocab_log.jsonl
 vocab_convergence.jsonl
+generations.jsonl
 observation_results.json
 run*.log
 server.log

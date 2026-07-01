@@ -1981,3 +1981,233 @@ class TestGrowingBrain:
         # Each growth should increase params
         for i in range(1, len(params)):
             assert params[i] > params[i-1]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 5 — Reproduction Engine (fertility, pregnancy, baby spawning, lineage)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestReproductionEngine:
+    """Tests for the Phase 5 reproduction module."""
+
+    def _make_repro(self, tmp_path):
+        from reproduction import ReproductionEngine
+        return ReproductionEngine(seed=42, log_path=str(tmp_path / "gen.jsonl"))
+
+    def _make_bio(self, glucose=80, hydration=80):
+        class MockBio:
+            def __init__(self):
+                self.glucose = glucose
+                self.hydration = hydration
+                self.body_mass = 70.0
+                self.metabolism_rate = 1.0
+                self.curiosity_base_rate = 0.5
+                self.vision_range = 3.0
+                self.growth_rate = 1.0
+                self._age_ticks = 3000
+            def can_reproduce(self):
+                return 2000 <= self._age_ticks < 6000
+            def get_average_immunity(self):
+                return 0.5
+        return MockBio()
+
+    def test_register_agent_creates_record(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        repro.register_agent("adam", [], 1, 0)
+        assert "adam" in repro.agents
+        assert repro.agents["adam"].generation == 1
+
+    def test_eve_fertile_window(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        assert repro.is_eve_fertile(tick=50) is True   # within first 200
+        assert repro.is_eve_fertile(tick=199) is True
+        assert repro.is_eve_fertile(tick=200) is False  # infertile window
+        assert repro.is_eve_fertile(tick=999) is False
+        assert repro.is_eve_fertile(tick=1000) is True  # cycle resets
+
+    def test_fertility_check_passes_when_conditions_met(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        repro.register_agent("adam", [], 1, 0)
+        repro.register_agent("eve", [], 1, 0)
+        adam_bio = self._make_bio()
+        eve_bio = self._make_bio()
+        result = repro.check_fertility(adam_bio, eve_bio, (5, 5), (5, 5), tick=50)
+        assert result["can_reproduce"] is True
+
+    def test_fertility_fails_too_far_apart(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        adam_bio = self._make_bio()
+        eve_bio = self._make_bio()
+        result = repro.check_fertility(adam_bio, eve_bio, (5, 5), (10, 10), tick=50)
+        assert not result["can_reproduce"]
+        assert result["reason"] == "too_far_apart"
+
+    def test_fertility_fails_eve_infertile(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        adam_bio = self._make_bio()
+        eve_bio = self._make_bio()
+        result = repro.check_fertility(adam_bio, eve_bio, (5, 5), (5, 5), tick=500)
+        assert not result["can_reproduce"]
+        assert result["reason"] == "eve_infertile_cycle"
+
+    def test_fertility_fails_low_glucose(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        adam_bio = self._make_bio(glucose=30)
+        eve_bio = self._make_bio()
+        result = repro.check_fertility(adam_bio, eve_bio, (5, 5), (5, 5), tick=50)
+        assert not result["can_reproduce"]
+        assert result["reason"] == "adam_low_glucose"
+
+    def test_fertility_fails_danger(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        adam_bio = self._make_bio()
+        eve_bio = self._make_bio()
+        result = repro.check_fertility(adam_bio, eve_bio, (5, 5), (5, 5), tick=50, danger_present=True)
+        assert not result["can_reproduce"]
+        assert result["reason"] == "danger_present"
+
+    def test_pregnancy_starts_and_runs(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        preg = repro.start_pregnancy("eve", "adam", tick=50)
+        assert preg.end_tick == 50 + 600
+        assert preg.start_tick == 50
+
+    def test_pregnancy_progress_increases(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        repro.start_pregnancy("eve", "adam", tick=50)
+        eve_bio = self._make_bio()
+        u1 = repro.update_pregnancy("eve", eve_bio, tick=100)
+        u2 = repro.update_pregnancy("eve", eve_bio, tick=300)
+        assert u2["progress"] > u1["progress"]
+
+    def test_pregnancy_metabolism_multiplier(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        repro.start_pregnancy("eve", "adam", tick=50)
+        eve_bio = self._make_bio()
+        update = repro.update_pregnancy("eve", eve_bio, tick=100)
+        assert update["metabolism_mult"] == 1.3  # +30%
+
+    def test_pregnancy_late_phase_speed_penalty(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        repro.start_pregnancy("eve", "adam", tick=50)
+        eve_bio = self._make_bio()
+        # Tick 500 = 450 elapsed > 400 (LATE_PREGNANCY_START)
+        update = repro.update_pregnancy("eve", eve_bio, tick=500)
+        assert update["in_late_phase"] is True
+        assert update["speed_mult"] == 0.8  # -20% speed
+
+    def test_miscarriage_on_low_health(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        repro.start_pregnancy("eve", "adam", tick=50)
+        eve_low_health = self._make_bio(glucose=15, hydration=15)
+        update = repro.update_pregnancy("eve", eve_low_health, tick=100)
+        assert update["miscarriage"] is True
+        assert repro.total_miscarriages == 1
+
+    def test_birth_at_gestation_end(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        repro.start_pregnancy("eve", "adam", tick=50)
+        eve_bio = self._make_bio()
+        update = repro.update_pregnancy("eve", eve_bio, tick=650)
+        assert update["birth"] is True
+
+    def test_spawn_baby_creates_new_agent(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        repro.register_agent("adam", [], 1, 0)
+        repro.register_agent("eve", [], 1, 0)
+        adam_bio = self._make_bio()
+        eve_bio = self._make_bio()
+        baby = repro.spawn_baby((5, 5), "eve", "adam", eve_bio, adam_bio, tick=100)
+        assert baby["generation"] == 2  # child of Gen 1
+        assert baby["baby_id"] not in ("adam", "eve")
+        assert "metabolism_rate" in baby["inherited_traits"]
+
+    def test_inherited_traits_have_mutation(self, tmp_path):
+        """Inherited traits should have Gaussian mutation ±10%."""
+        repro = self._make_repro(tmp_path)
+        adam_bio = self._make_bio()
+        eve_bio = self._make_bio()
+        # Run many times — should see variance
+        metabolism_rates = []
+        for _ in range(20):
+            baby = repro.spawn_baby((5, 5), "eve", "adam", eve_bio, adam_bio, tick=100)
+            metabolism_rates.append(baby["inherited_traits"]["metabolism_rate"])
+        # Should NOT all be the same value (mutation introduces variance)
+        assert len(set(metabolism_rates)) > 1
+
+    def test_disease_immunity_partial_transfer(self, tmp_path):
+        """Disease immunity should be 0.5 * max(parents)."""
+        repro = self._make_repro(tmp_path)
+        adam_bio = self._make_bio()
+        eve_bio = self._make_bio()
+        baby = repro.spawn_baby((5, 5), "eve", "adam", eve_bio, adam_bio, tick=100)
+        # max(parents) = 0.5, so baby gets 0.5 * 0.5 = 0.25
+        assert baby["inherited_traits"]["disease_immunity"] == 0.25
+
+    def test_generations_jsonl_log_written(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        repro.register_agent("adam", [], 1, 0)
+        repro.register_agent("eve", [], 1, 0)
+        repro.start_pregnancy("eve", "adam", tick=50)
+        eve_bio = self._make_bio()
+        repro.update_pregnancy("eve", eve_bio, tick=650)
+        repro.spawn_baby((5, 5), "eve", "adam", eve_bio, eve_bio, tick=650)
+        import json
+        with open(tmp_path / "gen.jsonl") as f:
+            lines = [json.loads(l) for l in f if l.strip()]
+        # Should have BIRTH events for adam, eve, baby + PREGNANCY_START + BABY_BORN
+        events = [e["event"] for e in lines]
+        assert "BIRTH" in events
+        assert "PREGNANCY_START" in events
+        assert "BABY_BORN" in events
+
+    def test_family_tree_built(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        repro.register_agent("adam", [], 1, 0)
+        repro.register_agent("eve", [], 1, 0)
+        adam_bio = self._make_bio()
+        eve_bio = self._make_bio()
+        baby = repro.spawn_baby((5, 5), "eve", "adam", eve_bio, adam_bio, tick=100)
+        tree = repro.get_family_tree("adam", max_depth=2)
+        assert tree["agent_id"] == "adam"
+        assert len(tree["children"]) == 1
+        assert tree["children"][0]["agent_id"] == baby["baby_id"]
+
+    def test_generation_stats_tracked(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        repro.register_agent("adam", [], 1, 0)
+        repro.register_agent("eve", [], 1, 0)
+        adam_bio = self._make_bio()
+        eve_bio = self._make_bio()
+        repro.spawn_baby((5, 5), "eve", "adam", eve_bio, adam_bio, tick=100)
+        stats = repro.get_generation_stats()
+        assert 1 in stats
+        assert 2 in stats
+        assert stats[1]["count"] == 2  # adam + eve
+        assert stats[2]["count"] == 1  # baby
+
+    def test_death_recorded(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        repro.register_agent("adam", [], 1, 0)
+        repro.record_death("adam", death_tick=1000, cause="starvation")
+        agent = repro.get_agent("adam")
+        assert agent.death_tick == 1000
+        assert agent.death_cause == "starvation"
+        assert repro.total_deaths == 1
+
+    def test_summary_returns_stats(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        repro.register_agent("adam", [], 1, 0)
+        repro.register_agent("eve", [], 1, 0)
+        summary = repro.get_summary()
+        assert summary["total_agents"] == 2
+        assert summary["living"] == 2
+        assert summary["max_generation"] == 1
+
+    def test_pregnancy_status_for_dashboard(self, tmp_path):
+        repro = self._make_repro(tmp_path)
+        repro.start_pregnancy("eve", "adam", tick=50)
+        status = repro.get_pregnancy_status("eve")
+        assert status is not None
+        assert status["active"] is True
+        assert 0 <= status["progress"] <= 1
