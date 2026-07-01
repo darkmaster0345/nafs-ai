@@ -1269,3 +1269,240 @@ class TestPhysicsEngine:
             sim.step("IDLE")
         # Body temp should have moved away from initial 37
         assert sim.physics.body_temp != 37.0
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 2 — Chemistry Engine (food, toxicity, illness, cooking, water quality)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestChemistryEngine:
+    """Tests for the Phase 2 chemistry module."""
+
+    def _make_chem(self):
+        from chemistry import ChemistryEngine
+        class MockPhysics:
+            def __init__(self):
+                self.fire_tiles = set()
+            def is_fire_tile(self, x, y):
+                return (x, y) in self.fire_tiles
+        return ChemistryEngine(MockPhysics(), seed=42)
+
+    def test_food_types_defined(self):
+        from chemistry import FOOD_TYPES
+        required = {"red_berry", "blue_berry", "mushroom", "fish",
+                    "roots", "raw_meat", "cooked_meat", "cooked_fish"}
+        assert required.issubset(set(FOOD_TYPES.keys()))
+
+    def test_food_has_required_properties(self):
+        from chemistry import FOOD_TYPES
+        for name, props in FOOD_TYPES.items():
+            assert "calories" in props, f"{name} missing calories"
+            assert "protein" in props, f"{name} missing protein"
+            assert "fat" in props, f"{name} missing fat"
+            assert "water_content" in props, f"{name} missing water_content"
+            assert "toxicity" in props, f"{name} missing toxicity"
+            assert "decay_rate" in props, f"{name} missing decay_rate"
+
+    def test_red_berry_is_poisonous(self):
+        from chemistry import FOOD_TYPES
+        assert FOOD_TYPES["red_berry"]["toxicity"] == 0.8
+
+    def test_cooked_meat_is_safe(self):
+        from chemistry import FOOD_TYPES
+        assert FOOD_TYPES["cooked_meat"]["toxicity"] == 0.0
+
+    def test_spawn_food_in_forest(self):
+        chem = self._make_chem()
+        food = chem.spawn_food_at("forest", 5, 5)
+        assert food in ("red_berry", "blue_berry", "mushroom", "roots")
+
+    def test_spawn_food_in_desert_returns_none(self):
+        chem = self._make_chem()
+        food = chem.spawn_food_at("desert", 5, 5)
+        assert food is None
+
+    def test_eating_safe_food_no_toxicity(self):
+        chem = self._make_chem()
+        result = chem.eat("blue_berry", tick=10)
+        assert result["toxicity"] == 0.0
+        assert len(chem.stomach) == 1
+
+    def test_eating_toxic_food_schedules_delayed_pain(self):
+        """Toxic food schedules pain event 100 ticks later."""
+        chem = self._make_chem()
+        chem.eat("red_berry", tick=10)
+        # No pending pain immediately
+        update = chem.update(tick=20, x=0, y=0)
+        assert len(update["pain_events"]) == 0
+        # Pain fires 100 ticks after eating
+        update = chem.update(tick=110, x=0, y=0)
+        assert len(update["pain_events"]) == 1
+        assert update["pain_events"][0]["pain"] > 0
+
+    def test_stomach_buffer_max_5(self):
+        """Stomach should only retain last 5 items eaten."""
+        chem = self._make_chem()
+        for i in range(10):
+            chem.eat("blue_berry", tick=i)
+        assert len(chem.stomach) == 5
+
+    def test_toxic_food_causes_illness(self):
+        """Highly toxic food should raise illness_level."""
+        chem = self._make_chem()
+        chem.eat("red_berry", tick=10)
+        chem.update(tick=110, x=0, y=0)
+        assert chem.illness_level > 0
+
+    def test_medicine_plant_reduces_illness(self):
+        """Medicine plant should reduce illness_level when sick."""
+        chem = self._make_chem()
+        chem.illness_level = 0.8
+        chem.illness_tick = 100
+        chem.eat("medicine_plant", tick=110)
+        assert chem.illness_level < 0.8
+
+    def test_illness_clears_after_500_ticks(self):
+        """Illness should clear after 500 ticks."""
+        chem = self._make_chem()
+        chem.illness_level = 0.5
+        chem.illness_tick = 100
+        chem.update(tick=601, x=0, y=0)
+        assert chem.illness_level == 0.0
+
+    def test_illness_health_drain_per_tick(self):
+        """Illness should cause health drain each tick."""
+        chem = self._make_chem()
+        chem.illness_level = 0.5
+        chem.illness_tick = 100
+        update = chem.update(tick=110, x=0, y=0)
+        assert update["illness"]["health_drain"] > 0
+        assert update["illness"]["energy_drain"] > 0
+
+    def test_cooking_raw_meat_near_fire(self):
+        """Raw meat near fire for 50 ticks should become cooked meat."""
+        chem = self._make_chem()
+        chem.spawn_food_at("plains", 5, 5, force_type="raw_meat")
+        chem.physics.fire_tiles.add((6, 5))  # fire adjacent
+        for tick in range(50):
+            chem.update(tick=tick, x=5, y=5)
+        food_info = chem.get_food_at(5, 5)
+        assert food_info["food_type"] == "cooked_meat"
+
+    def test_no_cooking_without_fire(self):
+        """Raw meat without fire should NOT cook."""
+        chem = self._make_chem()
+        chem.spawn_food_at("plains", 5, 5, force_type="raw_meat")
+        for tick in range(100):
+            chem.update(tick=tick, x=5, y=5)
+        food_info = chem.get_food_at(5, 5)
+        assert food_info["food_type"] == "raw_meat"
+
+    def test_ocean_water_causes_immediate_illness(self):
+        """Drinking ocean water should cause immediate illness."""
+        chem = self._make_chem()
+        result = chem.drink("ocean", tick=10)
+        assert result["immediate_illness"] is True
+        assert chem.illness_level > 0
+
+    def test_swamp_water_causes_delayed_illness(self):
+        """Swamp water should cause delayed illness (toxicity 0.4)."""
+        chem = self._make_chem()
+        result = chem.drink("swamp", tick=10)
+        assert not result["immediate_illness"]
+        assert result["toxicity"] == 0.4
+        # Wait for delayed toxicity
+        chem.update(tick=110, x=0, y=0)
+        assert chem.illness_level > 0
+
+    def test_river_water_is_safe(self):
+        """River water should be safe (no toxicity)."""
+        chem = self._make_chem()
+        result = chem.drink("river", tick=10)
+        assert result["toxicity"] == 0.0
+        assert not result["immediate_illness"]
+        assert chem.illness_level == 0.0
+
+    def test_food_decay_increases_toxicity(self):
+        """Decayed food should have higher toxicity than fresh."""
+        chem = self._make_chem()
+        chem.spawn_food_at("plains", 5, 5, force_type="raw_meat")
+        food_info = chem.get_food_at(5, 5)
+        fresh_tox = chem.get_effective_toxicity(
+            food_info["food_type"], food_info["freshness"], food_info["decayed"]
+        )
+        # Force decay
+        food_info["freshness"] = 0
+        food_info["decayed"] = True
+        decayed_tox = chem.get_effective_toxicity(
+            food_info["food_type"], food_info["freshness"], food_info["decayed"]
+        )
+        assert decayed_tox > fresh_tox
+
+    def test_vomit_empties_stomach(self):
+        """Vomiting should empty the stomach and reduce illness."""
+        chem = self._make_chem()
+        chem.eat("red_berry", tick=10)
+        chem.eat("blue_berry", tick=20)
+        assert len(chem.stomach) == 2
+        chem.illness_level = 0.5
+        result = chem.vomit(tick=25)
+        assert result["success"]
+        assert result["emptied_count"] == 2
+        assert len(chem.stomach) == 0
+        assert chem.illness_level < 0.5
+
+    def test_vomit_cooldown(self):
+        """Vomiting should have a cooldown."""
+        chem = self._make_chem()
+        chem.eat("blue_berry", tick=10)
+        result1 = chem.vomit(tick=20)
+        assert result1["success"]
+        result2 = chem.vomit(tick=21)
+        assert not result2["success"]
+
+    def test_sensory_extensions_returned(self):
+        """get_sensory_extensions should return all required fields."""
+        chem = self._make_chem()
+        ext = chem.get_sensory_extensions(5, 5)
+        required = {"stomach_contents", "toxicity_signal", "illness_level",
+                    "smell_intensity", "food_here", "food_cooking"}
+        assert set(ext.keys()) == required
+
+    def test_smell_intensity_when_food_on_tile(self):
+        """smell_intensity should be 1.0 when food is on the current tile."""
+        chem = self._make_chem()
+        chem.spawn_food_at("forest", 5, 5, force_type="mushroom")
+        ext = chem.get_sensory_extensions(5, 5)
+        assert ext["smell_intensity"] == 1.0
+        assert ext["food_here"] is True
+
+    def test_smell_intensity_when_food_adjacent(self):
+        """smell_intensity should be 0.5 when food is on an adjacent tile."""
+        chem = self._make_chem()
+        chem.spawn_food_at("forest", 6, 5, force_type="mushroom")
+        ext = chem.get_sensory_extensions(5, 5)
+        assert ext["smell_intensity"] == 0.5
+
+    def test_world_sim_integrates_chemistry(self):
+        """WorldSim should instantiate ChemistryEngine and expose sensory fields."""
+        from world_sim import WorldSim
+        sim = WorldSim()
+        assert sim.chemistry is not None
+        state, _ = sim.reset()
+        assert "stomach_contents" in state
+        assert "illness_level" in state
+        assert "smell_intensity" in state
+
+    def test_world_sim_eat_uses_chemistry(self):
+        """EAT action should consume food from chemistry.food_on_tiles."""
+        from world_sim import WorldSim
+        sim = WorldSim()
+        sim.reset()
+        # Spawn food at Adam's location
+        sim.chemistry.spawn_food_at(sim.current_biome, sim.adam_x, sim.adam_y,
+                                     force_type="blue_berry")
+        assert sim.chemistry.has_food_at(sim.adam_x, sim.adam_y)
+        sim.step("EAT")
+        # Food should be consumed
+        assert not sim.chemistry.has_food_at(sim.adam_x, sim.adam_y)
+        assert len(sim.chemistry.stomach) == 1

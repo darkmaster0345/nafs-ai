@@ -25,6 +25,13 @@ try:
 except ImportError:
     PHYSICS_AVAILABLE = False
 
+# Phase 2: Chemistry Engine integration
+try:
+    from chemistry import ChemistryEngine
+    CHEMISTRY_AVAILABLE = True
+except ImportError:
+    CHEMISTRY_AVAILABLE = False
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Biome Definitions — Each biome has unique survival characteristics
@@ -417,6 +424,12 @@ class WorldSim:
         # One instance per WorldSim — body_temp is the agent's body temp.
         self.physics = PhysicsEngine(self.world_map) if PHYSICS_AVAILABLE else None
 
+        # Phase 2: Chemistry Engine (food, toxicity, illness, cooking)
+        # One instance per WorldSim. Connected to physics for cooking logic.
+        self.chemistry = None
+        if CHEMISTRY_AVAILABLE and self.physics is not None:
+            self.chemistry = ChemistryEngine(self.physics)
+
     def reset(self):
         """
         Initialize Adam's one and only life.
@@ -448,6 +461,17 @@ class WorldSim:
         if self.physics is not None:
             from physics import PhysicsEngine
             self.physics = PhysicsEngine(self.world_map)
+
+        # Phase 2: Reset chemistry engine for new life + spawn initial food
+        if self.chemistry is not None and self.physics is not None:
+            from chemistry import ChemistryEngine
+            self.chemistry = ChemistryEngine(self.physics)
+            # Spawn some food in the starting area
+            for _ in range(10):
+                fx = (self.adam_x + random.randint(-5, 5)) % self.world_map.width
+                fy = (self.adam_y + random.randint(-5, 5)) % self.world_map.height
+                biome_here = self.world_map.get_biome(fx, fy)
+                self.chemistry.spawn_food_at(biome_here, fx, fy)
 
         return self._get_world_state(), self.adam_stats.to_dict()
 
@@ -538,6 +562,10 @@ class WorldSim:
             # body_temp from physics engine
             state['body_temp'] = self.physics.body_temp
 
+        # Phase 2: Chemistry sensory extensions (stomach, toxicity, illness, smell)
+        if self.chemistry is not None:
+            state.update(self.chemistry.get_sensory_extensions(self.adam_x, self.adam_y))
+
         return state
 
     def step(self, action: str):
@@ -592,6 +620,19 @@ class WorldSim:
             )
             if sandstorm_fx["pain"] > 0:
                 self.adam_stats.pain = min(10.0, self.adam_stats.pain + sandstorm_fx["pain"])
+
+        # Phase 2: Update chemistry engine (toxicity, illness, decay, cooking)
+        if self.chemistry is not None:
+            chem_update = self.chemistry.update(self.current_tick, self.adam_x, self.adam_y)
+            # Apply delayed pain from toxic food
+            for pain_event in chem_update["pain_events"]:
+                self.adam_stats.pain = min(10.0, self.adam_stats.pain + pain_event["pain"] * 0.5)
+            # Apply illness damage
+            illness = chem_update["illness"]
+            if illness["health_drain"] > 0:
+                self.adam_stats.health -= illness["health_drain"]
+            if illness["energy_drain"] > 0:
+                self.adam_stats.energy -= illness["energy_drain"]
 
         # --- Update world events based on biome ---
         food_prob = random.uniform(0.05, 0.15) * biome["food_chance"] / 0.1
@@ -687,34 +728,89 @@ class WorldSim:
                 pass
         
         elif action == "EAT":
-            if self.world_events['food_nearby'] > 0.5:
+            # Phase 2: Chemistry-based eating
+            ate_food = False
+            if self.chemistry is not None and self.chemistry.has_food_at(self.adam_x, self.adam_y):
+                food_info = self.chemistry.get_food_at(self.adam_x, self.adam_y)
+                food_type = food_info["food_type"]
+                # Compute effective toxicity (decay increases toxicity)
+                eff_tox = self.chemistry.get_effective_toxicity(
+                    food_type, food_info["freshness"], food_info["decayed"]
+                )
+                # Temporarily override the food's toxicity for this eat action
+                # (so delayed pain fires with the correct amount)
+                result = self.chemistry.eat(food_type, self.current_tick)
+                # Override the toxicity in pending_toxicity with effective toxicity
+                if eff_tox != result.get("toxicity", 0) and self.chemistry.pending_toxicity:
+                    # The last appended entry is for this food
+                    last = self.chemistry.pending_toxicity[-1]
+                    self.chemistry.pending_toxicity[-1] = (last[0], eff_tox, last[2])
+                # Apply immediate nutrition (calories reduce hunger)
+                food_value = result.get("calories", 30) * 0.5  # calories → hunger reduction
+                self.adam_stats.hunger = max(0.0, self.adam_stats.hunger - food_value)
+                reward += 1.0
+                self.chemistry.remove_food_at(self.adam_x, self.adam_y)
+                # Mark food_nearby as consumed
+                self.world_events['food_nearby'] = 0.0
+                ate_food = True
+                # Medicine plant bonus
+                if result.get("heals_illness"):
+                    reward += 0.5  # bonus for finding medicine when sick
+            elif self.world_events['food_nearby'] > 0.5:
+                # Legacy fallback (no chemistry, or no food on tile but event flagged)
                 food_value = random.uniform(20, 40)
-                # Biome affects food quality
                 if self.current_biome == "jungle":
-                    food_value *= 1.3  # Better food
+                    food_value *= 1.3
                 elif self.current_biome in ("desert", "tundra", "volcano"):
-                    food_value *= 0.7  # Poor food
+                    food_value *= 0.7
                 self.adam_stats.hunger = max(0.0, self.adam_stats.hunger - food_value)
                 reward += 1.0
                 self.world_events['food_nearby'] = 0.0
-            else:
+                ate_food = True
+            if not ate_food:
                 self.adam_stats.stress += 0.5
                 reward -= 0.1
             self.adam_stats.energy -= 0.5
-        
+
         elif action == "DRINK":
-            if self.world_events['water_nearby'] > 0.5:
+            # Phase 2: Chemistry-based drinking (water quality matters)
+            drank = False
+            if self.chemistry is not None:
+                # Determine water source based on biome + physics water tiles
+                water_source = self.chemistry.get_water_source_for(
+                    self.current_biome, self.adam_x, self.adam_y,
+                    self.physics.water_tiles if self.physics else set(),
+                )
+                # Only allow drinking if there's actually water nearby
+                can_drink = (self.world_events['water_nearby'] > 0.5 or
+                             water_source == "ocean" or
+                             (self.physics and self.physics.is_water_tile(self.adam_x, self.adam_y)) or
+                             self.weather_system.current in ("rain", "storm", "blizzard"))
+                if can_drink:
+                    result = self.chemistry.drink(water_source, self.current_tick)
+                    drink_value = result["hydration"] * 0.5  # hydration → hunger reduction
+                    self.adam_stats.hunger = max(0.0, self.adam_stats.hunger - drink_value)
+                    self.adam_stats.stress = max(0.0, self.adam_stats.stress - 5.0)
+                    if result.get("immediate_illness"):
+                        reward -= 0.5  # ocean = bad
+                    else:
+                        reward += 0.2
+                    self.world_events['water_nearby'] = 0.0
+                    drank = True
+            elif self.world_events['water_nearby'] > 0.5:
                 drink_value = random.uniform(5, 15)
                 self.adam_stats.hunger = max(0.0, self.adam_stats.hunger - drink_value)
                 self.adam_stats.stress = max(0.0, self.adam_stats.stress - 5.0)
                 reward += 0.2
                 self.world_events['water_nearby'] = 0.0
+                drank = True
             elif self.weather_system.current in ("rain", "storm", "blizzard"):
                 # Can collect rainwater
                 self.adam_stats.hunger = max(0.0, self.adam_stats.hunger - random.uniform(3, 8))
                 self.adam_stats.stress = max(0.0, self.adam_stats.stress - 2.0)
                 reward += 0.1
-            else:
+                drank = True
+            if not drank:
                 self.adam_stats.stress += 0.2
                 reward -= 0.05
             self.adam_stats.energy -= 0.3
