@@ -1382,7 +1382,25 @@ class ThoughtEngine:
 
         # Include discovery info if any new words were found
         if new_words:
-            result["new_words"] = [(w, m) for w, m in new_words]
+            # Enrich with trigger + context (Phase 0.3: vocab_log.jsonl spec)
+            enriched = []
+            for word, meaning in new_words:
+                meta = self.vocab_discovery.discovered.get(word, {})
+                # Find matching discovery_record for full context
+                ctx = {}
+                for rec in reversed(self.vocab_discovery.discovery_log):
+                    if rec.get("word") == word:
+                        ctx = rec.get("context", {})
+                        break
+                enriched.append({
+                    "word": word,
+                    "meaning": meaning,
+                    "trigger": meta.get("trigger", ""),
+                    "context": ctx,
+                })
+            result["new_words"] = enriched
+            # Backward-compat: also expose as list of (word, meaning) tuples
+            result["new_words_tuples"] = [(w, m) for w, m in new_words]
             # Sync discovered vocabulary to persistent memory for persistence
             for word, meaning in new_words:
                 self.persistent_memory._discovered_vocabulary[word] = {

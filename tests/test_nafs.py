@@ -905,3 +905,130 @@ class TestMultiAgentIntegration:
         # Final entry should show some divergence (jaccard < 1.0)
         final = entries[-1]
         assert final["jaccard"] < 1.0, "Vocab should diverge over 100 ticks"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 0.3 — Per-word vocab_log.jsonl + Convergence detection
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestVocabWordLog:
+    """Tests for the per-word vocab_log.jsonl (MD Phase 0.3 spec)."""
+
+    def test_word_log_format_matches_md_spec(self, tmp_path):
+        """vocab_log.jsonl entries must contain {tick, agent, word, context_of_discovery}."""
+        from vocab_divergence import VocabDivergenceLogger
+        logger = VocabDivergenceLogger(
+            log_path=str(tmp_path / "v.jsonl"),
+            word_log_path=str(tmp_path / "vocab_log.jsonl"),
+            convergence_log_path=str(tmp_path / "vocab_conv.jsonl"),
+        )
+        logger.log_word_discovery(
+            tick=42, agent="adam", word="cactus sand",
+            meaning="a dry place", trigger="ENTERED_DESERT",
+            context={"biome": "desert", "temperature": 38},
+        )
+        import json
+        with open(tmp_path / "vocab_log.jsonl") as f:
+            entry = json.loads(f.readline())
+        # MD Phase 0.3 spec required keys
+        assert entry["tick"] == 42
+        assert entry["agent"] == "adam"
+        assert entry["word"] == "cactus sand"
+        assert "context_of_discovery" in entry
+        assert entry["context_of_discovery"]["biome"] == "desert"
+
+    def test_convergence_detection_same_trigger(self, tmp_path):
+        """When both agents discover a word for the same trigger, flag as convergence."""
+        from vocab_divergence import VocabDivergenceLogger
+        import json
+        logger = VocabDivergenceLogger(
+            log_path=str(tmp_path / "v.jsonl"),
+            word_log_path=str(tmp_path / "vocab_log.jsonl"),
+            convergence_log_path=str(tmp_path / "vocab_conv.jsonl"),
+        )
+        # Adam discovers first
+        logger.log_word_discovery(
+            tick=10, agent="adam", word="cactus sand",
+            meaning="dry place", trigger="ENTERED_DESERT",
+            context={"biome": "desert"},
+        )
+        # Eve discovers a different word for the same trigger later
+        logger.log_word_discovery(
+            tick=50, agent="eve", word="sun hot",
+            meaning="dry place", trigger="ENTERED_DESERT",
+            context={"biome": "desert"},
+        )
+        with open(tmp_path / "vocab_conv.jsonl") as f:
+            conv = json.loads(f.readline())
+        assert conv["convergence_type"] == "SAME_TRIGGER"
+        assert conv["adam_word"] == "cactus sand"
+        assert conv["eve_word"] == "sun hot"
+        assert conv["first_discoverer"] == "adam"
+        assert conv["time_gap_ticks"] == 40
+
+    def test_convergence_detection_exact_match(self, tmp_path):
+        """EXACT_MATCH convergence when both agents invent the same word."""
+        from vocab_divergence import VocabDivergenceLogger
+        import json
+        logger = VocabDivergenceLogger(
+            log_path=str(tmp_path / "v.jsonl"),
+            word_log_path=str(tmp_path / "vocab_log.jsonl"),
+            convergence_log_path=str(tmp_path / "vocab_conv.jsonl"),
+        )
+        logger.log_word_discovery(
+            tick=10, agent="adam", word="cold dark",
+            meaning="a cave", trigger="ENTERED_CAVE",
+            context={"biome": "cave"},
+        )
+        logger.log_word_discovery(
+            tick=20, agent="eve", word="cold dark",
+            meaning="a cave", trigger="ENTERED_CAVE",
+            context={"biome": "cave"},
+        )
+        with open(tmp_path / "vocab_conv.jsonl") as f:
+            conv = json.loads(f.readline())
+        assert conv["convergence_type"] == "EXACT_MATCH"
+
+    def test_no_convergence_when_only_one_agent_discovers(self, tmp_path):
+        """Convergence log stays empty if only one agent discovers."""
+        from vocab_divergence import VocabDivergenceLogger
+        logger = VocabDivergenceLogger(
+            log_path=str(tmp_path / "v.jsonl"),
+            word_log_path=str(tmp_path / "vocab_log.jsonl"),
+            convergence_log_path=str(tmp_path / "vocab_conv.jsonl"),
+        )
+        logger.log_word_discovery(
+            tick=10, agent="adam", word="cactus sand",
+            meaning="dry", trigger="ENTERED_DESERT",
+            context={},
+        )
+        # No file or empty file
+        import os
+        assert not os.path.exists(tmp_path / "vocab_conv.jsonl") or \
+               os.path.getsize(tmp_path / "vocab_conv.jsonl") == 0
+
+    def test_render_dashboard_html(self, tmp_path):
+        """Dashboard HTML should be created and contain expected sections."""
+        from vocab_divergence import VocabDivergenceLogger
+        out = tmp_path / "dashboard.html"
+        logger = VocabDivergenceLogger(
+            log_path=str(tmp_path / "v.jsonl"),
+            word_log_path=str(tmp_path / "vocab_log.jsonl"),
+            convergence_log_path=str(tmp_path / "vocab_conv.jsonl"),
+        )
+        logger.log_word_discovery(
+            tick=1, agent="adam", word="hot",
+            meaning="warm", trigger="HOT",
+            context={},
+        )
+        logger.log_word_discovery(
+            tick=2, agent="eve", word="warm",
+            meaning="warm", trigger="HOT",
+            context={},
+        )
+        path = logger.render_dashboard_html(str(out))
+        assert os.path.exists(path)
+        html = open(path).read()
+        assert "Adam's Vocabulary" in html
+        assert "Eve's Vocabulary" in html
+        assert "Convergence" in html

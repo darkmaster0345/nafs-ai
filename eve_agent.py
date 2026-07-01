@@ -165,6 +165,7 @@ class EveAgent:
         self.latest_emotion = "uncertain"
         self.latest_dream = None
         self.latest_reflection = None
+        self.latest_new_words = []  # discoveries made this tick: [(word, meaning, trigger, context)]
         self.latest_dialogue = ""
         self.recent_actions = []
 
@@ -401,6 +402,9 @@ class EveAgent:
         )
         rule_based_thought = experience.get('thought', 'quiet. still.')
         self.latest_emotion = experience.get('emotion', 'uncertain')
+        # Capture new-word discoveries for the vocab divergence logger
+        # (Phase 0.3: per-word vocab_log.jsonl)
+        self.latest_new_words = experience.get('new_words', [])
 
         # Record experience for learned thinker
         if self.sensory_input is not None:

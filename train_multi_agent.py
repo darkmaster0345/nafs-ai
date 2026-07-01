@@ -444,6 +444,8 @@ def run_multi_agent_life(
     # ── Init loggers ───────────────────────────────────────────────────────
     vocab_logger = VocabDivergenceLogger(
         log_path="vocab_divergence.jsonl",
+        word_log_path="vocab_log.jsonl",
+        convergence_log_path="vocab_convergence.jsonl",
         log_interval=50,
     )
     tb_logger = TBLogger(log_dir="runs/nafs_multi_agent")
@@ -634,6 +636,8 @@ def run_multi_agent_life(
                 eve.sensory_input = eve_agent.sensory_input
                 eve.latest_thought = eve_agent.latest_thought
                 eve.latest_emotion = eve_agent.latest_emotion
+                # Phase 0.3: propagate new-word discoveries so we can log them
+                eve.latest_new_words = getattr(eve_agent, 'latest_new_words', [])
 
                 # ═══ DISPLAY ═══
                 if tick % FULL_DISPLAY_EVERY == 0:
@@ -652,8 +656,38 @@ def run_multi_agent_life(
 
                 # Show new words
                 if "new_words" in adam_experience:
-                    for word, meaning in adam_experience["new_words"]:
+                    # new_words is now a list of dicts (Phase 0.3 enriched)
+                    for entry in adam_experience["new_words"]:
+                        word = entry["word"] if isinstance(entry, dict) else entry[0]
+                        meaning = entry["meaning"] if isinstance(entry, dict) else entry[1]
+                        trigger = entry.get("trigger", "") if isinstance(entry, dict) else ""
+                        ctx = entry.get("context", {}) if isinstance(entry, dict) else {}
                         print(f"  \U0001f4dd Adam NEW WORD: \"{word}\" = {meaning}", flush=True)
+                        # Phase 0.3: per-word vocab_log.jsonl
+                        vocab_logger.log_word_discovery(
+                            tick=tick, agent="adam", word=word,
+                            meaning=meaning, trigger=trigger, context=ctx,
+                        )
+
+                # Log Eve's new words too (Eve's experience is captured inside
+                # eve_agent.step(); we read latest_new_words here)
+                if getattr(eve, 'latest_new_words', None):
+                    for entry in eve.latest_new_words:
+                        if isinstance(entry, dict):
+                            word = entry.get("word", "")
+                            meaning = entry.get("meaning", "")
+                            trigger = entry.get("trigger", "")
+                            ctx = entry.get("context", {})
+                        else:
+                            word, meaning = entry[0], entry[1]
+                            trigger, ctx = "", {}
+                        if not word:
+                            continue
+                        print(f"  \U0001f4dd Eve  NEW WORD: \"{word}\" = {meaning}", flush=True)
+                        vocab_logger.log_word_discovery(
+                            tick=tick, agent="eve", word=word,
+                            meaning=meaning, trigger=trigger, context=ctx,
+                        )
 
                 # ═══ VOCAB DIVERGENCE LOGGING ═══
                 if vocab_logger.should_log(tick):
@@ -896,6 +930,13 @@ def run_multi_agent_life(
 
         # Final vocab divergence summary
         vocab_logger.summary()
+
+        # Phase 0.3: render static HTML dashboard panel
+        try:
+            dashboard_path = vocab_logger.render_dashboard_html("docs/vocab_dashboard.html")
+            print(f"  \U0001f4ca Vocabulary dashboard written to: {dashboard_path}", flush=True)
+        except Exception as e:
+            print(f"  \u26a0\ufe0f Failed to render vocab dashboard: {e}", flush=True)
 
         # Save final models
         adam_final = os.path.join(MODEL_DIR, "adam_final.pt")
