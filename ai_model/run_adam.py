@@ -29,9 +29,9 @@ def main():
     print(f"  Nafs AI — {meta.get('agent','Adam')} (standalone)")
     print("=" * 60)
     print(f"  Checkpoint : {CKPT}")
-    print(f"  Source     : {meta.get('source_checkpoint', 'random init (untrained)')}")
-    if 'tick' in meta:
-        print(f"  Trained at : tick {meta['tick']}")
+    print(f"  Source     : {meta.get('weights_source', 'random init (untrained)')}")
+    if 'tick' in meta and meta.get('tick'):
+        print(f"  Trained at : tick {meta['tick']}  (LOCAL ONLY — do not redistribute)")
     print(f"  BabyBrain params    : {sum(p.numel() for p in brain.parameters()):,}")
     print(f"  Thinker   params    : {sum(p.numel() for p in thinker.parameters()):,}")
     print(f"  Input dim  : {meta.get('input_dim', 21)}")

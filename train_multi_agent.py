@@ -449,6 +449,14 @@ def run_multi_agent_life(
     """
     DEVICE = torch.device("cpu")
 
+    if respawn:
+        print("\n" + "!" * 78, flush=True)
+        print("  ⚠️  THREE-LAWS VIOLATION  —  --respawn IS ENABLED", flush=True)
+        print("  Agents will wake up after death WITH THEIR BRAIN PRESERVED.", flush=True)
+        print("  This means they remember previous lives. The Three Laws forbid this.", flush=True)
+        print("  Use ONLY for engine code debugging. Do NOT call this a real life.", flush=True)
+        print("!" * 78 + "\n", flush=True)
+
     print(f"\n{'=' * 78}", flush=True)
     print(f"  \U0001f476\U0001f9dd ADAM & EVE — MULTI-AGENT LIFE ({'v1.0' if first_contact else 'v0.3'})",
           flush=True)
@@ -1298,8 +1306,11 @@ if __name__ == "__main__":
     parser.add_argument("--tick-delay", type=float, default=TICK_DELAY,
                         help=f"Seconds between ticks (default {TICK_DELAY})")
     parser.add_argument("--respawn", action="store_true",
-                        help="Respawn dead agents with fresh body + same brain "
-                             "(enables 50k+ tick stress tests; default single-life mode)")
+                        help="[THREE-LAWS VIOLATION — use only for engine stress tests] "
+                             "Respawns dead agents with fresh body + SAME brain. "
+                             "This means the agent remembers previous lives — forbidden by "
+                             "the project's Three Laws for any real run. Use only when "
+                             "debugging the engine code itself; never for an actual life.")
     args = parser.parse_args()
 
     run_multi_agent_life(

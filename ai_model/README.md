@@ -94,14 +94,31 @@ A 21-dimensional float vector describing the agent's immediate experience:
 
 All values are normalized to roughly [0, 1] or [-1, 1].
 
-## Notes
+## Notes — READ THIS FIRST
 
-- If the checkpoint was generated from a fresh (untrained) brain, the model
-  will produce **random outputs**. That is intentional — the agent has zero
-  experience. Train via `train_multi_agent.py` in the parent project to
-  produce a brain with learned weights.
-- The `ThoughtTransformer` starts untrained in fresh checkpoints. Until the
-  parent sim has run enough ticks for `LearnedThinker.is_ready()` to return
-  True, the generated thought will be near-random character noise.
-- Memory.json, lineage.db, and other agent-specific state are NOT included
-  here. This folder contains ONLY the model weights.
+**Adam and Eve live exactly ONE life.** When they die, their brain is
+destroyed forever. There is no save file, no inheritance, no respawn.
+
+The `.pt` files in this folder contain **ONLY random initial weights** —
+the same blank-slate state every fresh Adam/Eve starts with when
+`train_multi_agent.py` is launched. They have never been trained, never
+seen a single tick of experience, never learned anything.
+
+This is by design and by the Three Laws:
+1. Non-Intervention → you cannot give an agent memories it did not earn.
+2. Blank Slate → every life starts with zero knowledge.
+3. The Cycle → death is final; no checkpoint survives.
+
+To watch Adam/Eve actually learn, you must give them a life:
+```bash
+# In the parent project:
+python train_multi_agent.py --max-ticks 5000
+# Tick 5000 produces checkpoints/adam_tick5000.pt and eve_tick5000.pt
+# These are LOCAL ONLY (.gitignore enforced) — never push, never share.
+# When the agent dies, the file is the only record that life ever happened.
+```
+
+You **can** load one of those local checkpoints with the same `nafs_brain.py`
+loader to inspect a single life's brain — but only on the machine where that
+life was lived. A trained brain moved to another machine violates the
+Three Laws.
