@@ -1789,3 +1789,195 @@ class TestBiologyEngine:
                                      force_type="fish")
         sim.step("EAT")
         assert sim.biology.glucose > initial_glucose
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 4 — Growing Brain (self-growing architecture, EWC, growth triggers)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestGrowingBrain:
+    """Tests for the Phase 4 growing brain module."""
+
+    def _make_brain(self, **kwargs):
+        from growing_brain import GrowingBrain
+        return GrowingBrain(input_dim=21, num_actions=8, seed=42, **kwargs)
+
+    def test_baby_brain_starts_small(self):
+        brain = self._make_brain()
+        info = brain.get_info()
+        assert info['architecture'] == 'mlp_only'
+        assert info['hidden_dim'] == 16
+        assert info['param_count'] < 1000  # ~500-800 params
+
+    def test_forward_pass_returns_valid_action(self):
+        import torch
+        brain = self._make_brain()
+        x = torch.randn(21)
+        action, log_prob, value, hidden = brain.act(x)
+        assert 0 <= action.item() < 8
+        assert log_prob.item() < 0  # log_prob is negative
+
+    def test_should_grow_returns_false_initially(self):
+        brain = self._make_brain()
+        assert not brain.should_grow(current_tick=100)
+
+    def test_should_grow_returns_false_with_few_samples(self):
+        brain = self._make_brain()
+        for tick in range(100):
+            brain.record_loss(loss=0.5, tick=tick)
+        # Not enough samples (need 500)
+        assert not brain.should_grow(current_tick=100)
+
+    def test_growth_triggered_on_loss_plateau(self):
+        brain = self._make_brain()
+        # Constant loss = no improvement = plateau
+        for tick in range(500):
+            brain.record_loss(loss=0.5, tick=tick)
+        assert brain.should_grow(current_tick=500)
+
+    def test_no_growth_when_loss_improving(self):
+        brain = self._make_brain()
+        # Steadily decreasing loss = improvement > 0.001
+        for tick in range(500):
+            loss = 1.0 - (tick / 500.0)  # 1.0 → 0.0
+            brain.record_loss(loss=loss, tick=tick)
+        assert not brain.should_grow(current_tick=500)
+
+    def test_min_ticks_between_growth(self):
+        brain = self._make_brain()
+        for tick in range(500):
+            brain.record_loss(loss=0.5, tick=tick)
+        brain.grow(tick=500)
+        # Should not grow again within the 500-tick window
+        # Record 499 ticks of plateau (not yet 500 since last growth)
+        for tick in range(500, 999):
+            brain.record_loss(loss=0.5, tick=tick)
+        # Only 499 ticks since last growth — should NOT grow yet
+        assert not brain.should_grow(current_tick=999)
+
+    def test_first_growth_adds_gru(self):
+        brain = self._make_brain()
+        for tick in range(500):
+            brain.record_loss(loss=0.5, tick=tick)
+        event = brain.grow(tick=500)
+        assert event['old_architecture'] == 'mlp_only'
+        assert event['new_architecture'] == 'mlp_gru'
+        assert event['new_params'] > event['old_params']
+
+    def test_growth_preserves_weights(self):
+        """After growth, weights that existed before should be transferred."""
+        import torch
+        brain = self._make_brain()
+        # Save initial fc1 weights
+        initial_fc1 = brain.model.fc1.weight.data.clone()
+        for tick in range(500):
+            brain.record_loss(loss=0.5, tick=tick)
+        event = brain.grow(tick=500)
+        # Some weights should have been transferred
+        assert event['weights_transferred']['transferred'] > 0
+
+    def test_growth_increases_param_count(self):
+        brain = self._make_brain()
+        initial_params = brain.get_param_count()
+        for tick in range(500):
+            brain.record_loss(loss=0.5, tick=tick)
+        brain.grow(tick=500)
+        assert brain.get_param_count() > initial_params
+
+    def test_multiple_growth_events_logged(self):
+        brain = self._make_brain()
+        for _ in range(3):
+            for tick in range(500):
+                brain.record_loss(loss=0.5, tick=brain.last_growth_tick + tick)
+            brain.grow(tick=brain.last_growth_tick + 500, vocab_size=50)
+        info = brain.get_info()
+        assert info['growth_events'] == 3
+        assert len(brain.growth_events) == 3
+
+    def test_growth_event_log_format(self):
+        brain = self._make_brain()
+        for tick in range(500):
+            brain.record_loss(loss=0.5, tick=tick)
+        event = brain.grow(tick=500)
+        # MD Phase 4.1 spec: {tick, old_params, new_params, trigger_reason}
+        assert 'tick' in event
+        assert 'old_params' in event
+        assert 'new_params' in event
+        assert 'trigger_reason' in event
+
+    def test_fifth_growth_requires_vocab_over_100(self):
+        brain = self._make_brain()
+        # Grow 4 times
+        for _ in range(4):
+            for tick in range(500):
+                brain.record_loss(loss=0.5, tick=brain.last_growth_tick + tick)
+            brain.grow(tick=brain.last_growth_tick + 500, vocab_size=50)
+        # 5th growth with vocab < 100: should NOT become transformer
+        for tick in range(500):
+            brain.record_loss(loss=0.5, tick=brain.last_growth_tick + tick)
+        brain.grow(tick=brain.last_growth_tick + 500, vocab_size=50)
+        assert brain.architecture != "transformer"
+
+    def test_fifth_growth_with_high_vocab_becomes_transformer(self):
+        brain = self._make_brain()
+        for _ in range(4):
+            for tick in range(500):
+                brain.record_loss(loss=0.5, tick=brain.last_growth_tick + tick)
+            brain.grow(tick=brain.last_growth_tick + 500, vocab_size=150)
+        for tick in range(500):
+            brain.record_loss(loss=0.5, tick=brain.last_growth_tick + tick)
+        brain.grow(tick=brain.last_growth_tick + 500, vocab_size=150)
+        assert brain.architecture == "transformer"
+
+    def test_ewc_penalty_returns_tensor(self):
+        import torch
+        brain = self._make_brain()
+        # No growth yet → no EWC penalty
+        penalty = brain.get_ewc_penalty()
+        assert isinstance(penalty, torch.Tensor)
+        assert penalty.item() == 0.0
+
+    def test_ewc_penalty_after_growth(self):
+        import torch
+        brain = self._make_brain()
+        for tick in range(500):
+            brain.record_loss(loss=0.5, tick=tick)
+        brain.grow(tick=500)
+        # EWC penalty should be a tensor (may be 0 if no shapes match)
+        penalty = brain.get_ewc_penalty()
+        assert isinstance(penalty, torch.Tensor)
+
+    def test_serialization_round_trip(self):
+        brain = self._make_brain()
+        for tick in range(500):
+            brain.record_loss(loss=0.5, tick=tick)
+        brain.grow(tick=500)
+        state = brain.to_dict()
+        from growing_brain import GrowingBrain
+        brain2 = GrowingBrain(input_dim=21, num_actions=8, seed=99)
+        brain2.load_state(state)
+        assert brain2.architecture == brain.architecture
+        assert brain2.growth_count == brain.growth_count
+        assert brain2.get_param_count() == brain.get_param_count()
+
+    def test_post_growth_forward_pass_works(self):
+        import torch
+        brain = self._make_brain()
+        for tick in range(500):
+            brain.record_loss(loss=0.5, tick=tick)
+        brain.grow(tick=500)
+        x = torch.randn(21)
+        action, log_prob, value, hidden = brain.act(x)
+        assert 0 <= action.item() < 8
+
+    def test_param_count_grows_over_multiple_events(self):
+        brain = self._make_brain()
+        params = [brain.get_param_count()]
+        for _ in range(3):
+            for tick in range(500):
+                brain.record_loss(loss=0.5, tick=brain.last_growth_tick + tick)
+            brain.grow(tick=brain.last_growth_tick + 500, vocab_size=50)
+            params.append(brain.get_param_count())
+        # Each growth should increase params
+        for i in range(1, len(params)):
+            assert params[i] > params[i-1]
