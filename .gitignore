@@ -24,6 +24,7 @@ vocab_extinctions.jsonl
 evolution_events.jsonl
 events.jsonl
 lineage.db
+snapshots/
 observation_results.json
 run*.log
 server.log

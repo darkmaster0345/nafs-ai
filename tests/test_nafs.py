@@ -3686,3 +3686,293 @@ class TestScienceDashboard:
         )
         import os
         assert os.path.exists(path)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 13 — Open-Ended Extension Systems
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestWorldEvolution:
+    """Tests for the Phase 13.1 world evolution module."""
+
+    def _make_world_evol(self):
+        from open_ended import WorldEvolution
+        class MockWorldMap:
+            def __init__(self):
+                self.width = 16
+                self.height = 16
+                self.tiles = {}
+                for x in range(self.width):
+                    for y in range(self.height):
+                        self.tiles[(x, y)] = "plains"
+                self.tiles[(5, 5)] = "volcano"
+                for x in range(0, 4):
+                    for y in range(0, 4):
+                        self.tiles[(x, y)] = "tundra"
+            def get_biome(self, x, y):
+                return self.tiles.get((x % self.width, y % self.height), "plains")
+        return WorldEvolution(MockWorldMap(), seed=42)
+
+    def test_step_returns_event_dict(self):
+        we = self._make_world_evol()
+        events = we.step(tick=100, avg_temp=20.0)
+        assert "biome_shift" in events
+        assert "volcano_eruption" in events
+        assert "glacier_advance" in events
+        assert "composite_biome_emergence" in events
+
+    def test_biome_shift_triggers_after_interval(self):
+        from open_ended import BIOME_SHIFT_INTERVAL
+        we = self._make_world_evol()
+        we.last_shift_tick = -BIOME_SHIFT_INTERVAL  # force shift
+        events = we.step(tick=0, avg_temp=20.0)
+        assert events["biome_shift"] is True
+
+    def test_glacier_advance_after_cold_streak(self):
+        """Glacier should advance after 5000 ticks of cold temperature."""
+        from open_ended import GLACIER_DURATION
+        we = self._make_world_evol()
+        glacier_advanced = False
+        for tick in range(GLACIER_DURATION + 1):
+            events = we.step(tick, avg_temp=15.0)  # 5° below baseline
+            if events["glacier_advance"]:
+                glacier_advanced = True
+                break
+        assert glacier_advanced
+
+    def test_no_glacier_advance_when_warm(self):
+        we = self._make_world_evol()
+        for tick in range(100):
+            events = we.step(tick, avg_temp=25.0)  # warm
+        assert not events["glacier_advance"]
+
+    def test_composite_biome_emergence(self):
+        """Flooded forest tiles should become mangrove."""
+        we = self._make_world_evol()
+        # Add a forest tile with water
+        we.world_map.tiles[(10, 10)] = "forest"
+        events = we.step(tick=100, avg_temp=20.0, water_tiles={(10, 10)})
+        assert len(events["composite_biome_emergence"]) > 0
+
+    def test_summary(self):
+        we = self._make_world_evol()
+        summary = we.get_summary()
+        assert "biome_shifts" in summary
+        assert "volcano_eruptions" in summary
+        assert "ash_tiles" in summary
+
+
+class TestDiseaseEvolution:
+    """Tests for the Phase 13.2 disease evolution module."""
+
+    def _make_disease(self):
+        from open_ended import DiseaseEvolution
+        return DiseaseEvolution(seed=42)
+
+    def test_initial_diseases_exist(self):
+        de = self._make_disease()
+        assert "swamp_fever" in de.diseases
+        assert "desert_plague" in de.diseases
+
+    def test_periodic_mutation(self):
+        from open_ended import DISEASE_MUTATION_INTERVAL
+        de = self._make_disease()
+        de.last_mutation_check = -DISEASE_MUTATION_INTERVAL
+        events = de.step(tick=10000, generation=1, avg_immunity=0.3)
+        assert len(events["mutations"]) > 0
+        # Virulence should have increased
+        assert de.diseases["swamp_fever"]["virulence"] > 0.4
+
+    def test_pressure_mutation_with_high_immunity(self):
+        de = self._make_disease()
+        # Run many ticks with high immunity to trigger pressure mutation
+        for _ in range(1000):
+            events = de.step(tick=100, generation=1, avg_immunity=0.8)
+            if any(m["reason"] == "immunity_pressure" for m in events["mutations"]):
+                assert True
+                return
+        # Should have triggered at least once in 1000 ticks
+        assert False, "Pressure mutation should have triggered"
+
+    def test_new_variant_every_5_generations(self):
+        from open_ended import DISEASE_NEW_VARIANT_GENERATIONS
+        de = self._make_disease()
+        events = de.step(tick=100, generation=DISEASE_NEW_VARIANT_GENERATIONS, avg_immunity=0.3)
+        assert len(events["new_variants"]) == 1
+        assert "variant_gen" in events["new_variants"][0]["new_variant"]
+
+    def test_virulence_capped_at_1(self):
+        """Virulence should never exceed 1.0."""
+        from open_ended import DISEASE_MUTATION_INTERVAL
+        de = self._make_disease()
+        # Force many mutations
+        for i in range(20):
+            de.last_mutation_check = -DISEASE_MUTATION_INTERVAL
+            de.step(tick=i * 10000, generation=1, avg_immunity=0.3)
+        for disease in de.diseases.values():
+            assert disease["virulence"] <= 1.0
+
+    def test_summary(self):
+        de = self._make_disease()
+        summary = de.get_summary()
+        assert "total_diseases" in summary
+        assert "total_mutations" in summary
+
+
+class TestNoveltyDetector:
+    """Tests for the Phase 13.3 novelty detector module."""
+
+    def _make_novelty(self):
+        from open_ended import NoveltyDetector
+        return NoveltyDetector()
+
+    def test_baseline_not_established_initially(self):
+        novelty = self._make_novelty()
+        assert not novelty.baseline_established
+
+    def test_baseline_established_after_1000_observations(self):
+        from open_ended import NOVELTY_BASELINE_SIZE
+        novelty = self._make_novelty()
+        for i in range(NOVELTY_BASELINE_SIZE):
+            novelty.record_behavior(f"behavior_{i % 10}", tick=i)
+        assert novelty.baseline_established
+
+    def test_known_behavior_not_novel(self):
+        from open_ended import NOVELTY_BASELINE_SIZE
+        novelty = self._make_novelty()
+        for i in range(NOVELTY_BASELINE_SIZE):
+            novelty.record_behavior("behavior_a", tick=i)
+        # Same behavior should not be novel
+        is_novel = novelty.record_behavior("behavior_a", tick=1001)
+        assert not is_novel
+
+    def test_new_behavior_is_novel(self):
+        from open_ended import NOVELTY_BASELINE_SIZE
+        novelty = self._make_novelty()
+        for i in range(NOVELTY_BASELINE_SIZE):
+            novelty.record_behavior(f"behavior_{i % 10}", tick=i)
+        # Brand new behavior should be novel
+        is_novel = novelty.record_behavior("brand_new_behavior", tick=1001)
+        assert is_novel
+
+    def test_measure_complexity_returns_dict(self):
+        novelty = self._make_novelty()
+        complexity = novelty.measure_complexity()
+        assert "entropy" in complexity
+        assert "unique_behaviors" in complexity
+        assert "total" in complexity
+
+    def test_complexity_increases_with_diversity(self):
+        """More diverse behaviors → higher entropy."""
+        from open_ended import NOVELTY_BASELINE_SIZE, NOVELTY_WINDOW_SIZE
+        novelty = self._make_novelty()
+        # Build baseline
+        for i in range(NOVELTY_BASELINE_SIZE):
+            novelty.record_behavior("same", tick=i)
+        # Record same behavior repeatedly → low entropy
+        for i in range(NOVELTY_WINDOW_SIZE):
+            novelty.record_behavior("same", tick=1000 + i)
+        low_entropy = novelty.measure_complexity()["entropy"]
+
+        # Now record diverse behaviors
+        novelty2 = self._make_novelty()
+        for i in range(NOVELTY_BASELINE_SIZE):
+            novelty2.record_behavior(f"b_{i % 20}", tick=i)
+        for i in range(NOVELTY_WINDOW_SIZE):
+            novelty2.record_behavior(f"diverse_{i % 20}", tick=1000 + i)
+        high_entropy = novelty2.measure_complexity()["entropy"]
+
+        assert high_entropy > low_entropy
+
+    def test_novel_events_recorded(self):
+        from open_ended import NOVELTY_BASELINE_SIZE
+        novelty = self._make_novelty()
+        for i in range(NOVELTY_BASELINE_SIZE):
+            novelty.record_behavior(f"b_{i % 10}", tick=i)
+        # Trigger novel events
+        novelty.record_behavior("novel_1", tick=1001)
+        novelty.record_behavior("novel_2", tick=1002)
+        events = novelty.get_novel_events()
+        assert len(events) == 2
+
+    def test_summary(self):
+        novelty = self._make_novelty()
+        summary = novelty.get_summary()
+        assert "baseline_established" in summary
+        assert "novel_events_detected" in summary
+        assert "current_entropy" in summary
+
+
+class TestWorldSeeding:
+    """Tests for the Phase 13.4 world seeding module."""
+
+    def _make_seeding(self, tmp_path):
+        from open_ended import WorldSeeding
+        return WorldSeeding(snapshot_dir=str(tmp_path))
+
+    def test_snapshot_creates_file(self, tmp_path):
+        seeding = self._make_seeding(tmp_path)
+        class MockEngine:
+            def to_dict(self): return {"value": 42}
+            def load_state(self, s): pass
+        path = seeding.snapshot("test", {"engine": MockEngine()}, tick=100)
+        import os
+        assert os.path.exists(path)
+
+    def test_restore_recovers_state(self, tmp_path):
+        seeding = self._make_seeding(tmp_path)
+        class MockEngine:
+            def __init__(self): self.value = 0
+            def to_dict(self): return {"value": self.value}
+            def load_state(self, s): self.value = s["value"]
+        engine = MockEngine()
+        engine.value = 42
+        seeding.snapshot("test", {"engine": engine}, tick=100)
+        # Modify
+        engine.value = 999
+        # Restore
+        seeding.restore("test", {"engine": engine})
+        assert engine.value == 42
+
+    def test_fork_creates_copy_with_seed(self, tmp_path):
+        seeding = self._make_seeding(tmp_path)
+        class MockEngine:
+            def to_dict(self): return {"x": 1}
+            def load_state(self, s): pass
+        seeding.snapshot("original", {"e": MockEngine()}, tick=100)
+        forked = seeding.fork("original", fork_seed=12345)
+        assert forked["fork_seed"] == 12345
+        assert forked["forked_from"] == "original"
+        # Original snapshot should be unchanged
+        assert "fork_seed" not in seeding.snapshots["original"]
+
+    def test_list_snapshots(self, tmp_path):
+        seeding = self._make_seeding(tmp_path)
+        class MockEngine:
+            def to_dict(self): return {}
+            def load_state(self, s): pass
+        seeding.snapshot("snap1", {"e": MockEngine()}, tick=100)
+        seeding.snapshot("snap2", {"e": MockEngine()}, tick=200)
+        snaps = seeding.list_snapshots()
+        assert len(snaps) == 2
+        names = [s["name"] for s in snaps]
+        assert "snap1" in names
+        assert "snap2" in names
+
+    def test_compare_runs(self, tmp_path):
+        seeding = self._make_seeding(tmp_path)
+        run_a = {"tick": 100, "engines": {"physics": {}, "biology": {}}}
+        run_b = {"tick": 200, "engines": {"physics": {}, "chemistry": {}}}
+        comparison = seeding.compare_runs(run_a, run_b)
+        assert "common_engines" in comparison
+        assert "physics" in comparison["common_engines"]
+
+    def test_summary(self, tmp_path):
+        seeding = self._make_seeding(tmp_path)
+        class MockEngine:
+            def to_dict(self): return {}
+            def load_state(self, s): pass
+        seeding.snapshot("test", {"e": MockEngine()}, tick=100)
+        summary = seeding.get_summary()
+        assert summary["total_snapshots"] == 1
+        assert "test" in summary["snapshot_names"]
