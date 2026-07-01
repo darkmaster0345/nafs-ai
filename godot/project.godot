@@ -2,6 +2,16 @@ config_version=5
 
 [application]
 config/name="Nafs AI"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+run/main_scene="res://MainScene.tscn"
+config/icon="res://icon.svg"
 
 [autoload]
 NetworkController="*res://NetworkController.gd"
+
+[display]
+window/size/viewport_width=1280
+window/size/viewport_height=720
+
+[renderer]
+renderer/rendering_method="gl_compatibility"

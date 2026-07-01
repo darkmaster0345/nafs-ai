@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Nafs AI — Vocabulary Divergence Dashboard</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #0d1117; color: #c9d1d9;
+  }
+  h1 { color: #58a6ff; margin: 0 0 4px; font-size: 22px; }
+  .sub { color: #8b949e; margin-bottom: 24px; font-size: 13px; }
+  .panel {
+    background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .agent-name { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .adam-color { color: #58a6ff; }
+  .eve-color  { color: #ff7b72; }
+  .word-list {
+    list-style: none; padding: 0; margin: 0;
+    max-height: 360px; overflow-y: auto;
+    font-family: "SF Mono", Menlo, monospace; font-size: 12px;
+  }
+  .word-list li {
+    padding: 6px 8px; border-bottom: 1px solid #21262d;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .word { font-weight: 600; }
+  .meaning { color: #8b949e; font-size: 11px; max-width: 200px; text-align: right; }
+  .tick { color: #6e7681; font-size: 10px; margin-left: 6px; }
+  .convergence {
+    background: #1f2937; border-left: 3px solid #3fb950;
+    padding: 8px 12px; margin-bottom: 8px; border-radius: 4px;
+    font-size: 12px;
+  }
+  .convergence .label { color: #3fb950; font-weight: 600; }
+  .convergence.exact { border-left-color: #bc8cff; }
+  .convergence.exact .label { color: #bc8cff; }
+  .stats {
+    display: flex; gap: 24px; flex-wrap: wrap;
+    margin-bottom: 16px; font-size: 13px;
+  }
+  .stat { background: #161b22; padding: 8px 12px; border-radius: 6px; border: 1px solid #30363d; }
+  .stat .num { font-size: 20px; font-weight: 700; color: #58a6ff; }
+  .stat .lbl { color: #8b949e; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .empty { color: #6e7681; font-style: italic; padding: 12px; text-align: center; }
+  button { background: #238636; color: white; border: 0; padding: 6px 12px;
+           border-radius: 4px; cursor: pointer; font-size: 12px; }
+  button:hover { background: #2ea043; }
+</style>
+</head>
+<body>
+  <h1>NAFS AI — Vocabulary Divergence Dashboard</h1>
+  <div class="sub">Phase 0.3 — Side-by-side Adam vs Eve vocabulary with convergence highlights.</div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="panel">
+    <div class="agent-name adam-color">Convergence Highlights</div>
+    <div id="convergences"><div class="empty">No convergence events yet.</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="agent-name adam-color">Adam's Vocabulary</div>
+      <ul class="word-list" id="adam-vocab"><div class="empty">No discoveries logged yet.</div></ul>
+    </div>
+    <div class="panel">
+      <div class="agent-name eve-color">Eve's Vocabulary</div>
+      <ul class="word-list" id="eve-vocab"><div class="empty">No discoveries logged yet.</div></ul>
+    </div>
+  </div>
+
+  <button onclick="location.reload()">Refresh</button>
+
+<script>
+async function load_jsonl(path) {
+  try {
+    const r = await fetch(path);
+    if (!r.ok) return [];
+    const text = await r.text();
+    return text.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
+  } catch (e) { return []; }
+}
+
+function render_word_list(elemId, discoveries) {
+  const el = document.getElementById(elemId);
+  if (!discoveries.length) {
+    el.innerHTML = '<div class="empty">No discoveries logged yet.</div>';
+    return;
+  }
+  el.innerHTML = discoveries.map(d => `
+    <li>
+      <span><span class="word">${d.word}</span><span class="tick">@t${d.tick}</span></span>
+      <span class="meaning">${d.meaning || d.trigger || ''}</span>
+    </li>
+  `).join('');
+}
+
+function render_convergences(events) {
+  const el = document.getElementById('convergences');
+  if (!events.length) {
+    el.innerHTML = '<div class="empty">No convergence events yet.</div>';
+    return;
+  }
+  el.innerHTML = events.map(e => `
+    <div class="convergence ${e.convergence_type === 'EXACT_MATCH' ? 'exact' : ''}">
+      <span class="label">${e.convergence_type.replace('_', ' ')}</span> —
+      trigger <code>${e.trigger}</code>:
+      Adam "<span class="adam-color">${e.adam_word}</span>" (t${e.adam_tick}) vs
+      Eve "<span class="eve-color">${e.eve_word}</span>" (t${e.eve_tick})
+      — gap ${e.time_gap_ticks}t, first: ${e.first_discoverer}
+    </div>
+  `).join('');
+}
+
+function render_stats(adam, eve, conv) {
+  const shared_triggers = new Set(
+    conv.map(c => c.trigger)
+  );
+  const adamWords = new Set(adam.map(d => d.word));
+  const eveWords  = new Set(eve.map(d => d.word));
+  const shared    = [...adamWords].filter(w => eveWords.has(w));
+  const jaccard   = (adamWords.size + eveWords.size) === 0 ? 1.0 :
+                    shared.length / (new Set([...adamWords, ...eveWords])).size;
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="num">${adam.length}</div><div class="lbl">Adam words</div></div>
+    <div class="stat"><div class="num">${eve.length}</div><div class="lbl">Eve words</div></div>
+    <div class="stat"><div class="num">${shared.length}</div><div class="lbl">Shared words</div></div>
+    <div class="stat"><div class="num">${conv.length}</div><div class="lbl">Convergences</div></div>
+    <div class="stat"><div class="num">${jaccard.toFixed(3)}</div><div class="lbl">Jaccard</div></div>
+  `;
+}
+
+(async () => {
+  const [adamAll, eveAll, conv] = await Promise.all([
+    load_jsonl('vocab_log.jsonl').then(arr => arr.filter(d => d.agent === 'adam')),
+    load_jsonl('vocab_log.jsonl').then(arr => arr.filter(d => d.agent === 'eve')),
+    load_jsonl('vocab_convergence.jsonl'),
+  ]);
+  render_word_list('adam-vocab', adamAll.reverse());
+  render_word_list('eve-vocab',  eveAll.reverse());
+  render_convergences(conv);
+  render_stats(adamAll, eveAll, conv);
+})();
+</script>
+</body>
+</html>

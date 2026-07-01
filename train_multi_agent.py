@@ -67,6 +67,14 @@ from ws_bridge import WSBridge
 from eve_agent import EveAgent
 from learned_thinking import LearnedThinker, blend_thoughts
 from vocab_divergence import VocabDivergenceLogger
+# Phase 4-13 orchestrator — wires GrowingBrain, ReproductionEngine,
+# MathIntuitionEngine, FirstContactEngine, SocialEngine, CultureEngine,
+# EvolutionTracker, EventLogSystem, LineageDatabase, WorldEvolution,
+# DiseaseEvolution, NoveltyDetector, WorldSeeding, GodotBridge
+from engine_orchestrator import EngineOrchestrator
+# Phase 11: HTTP server that Godot client polls — embedded as background
+# thread so it lives exactly as long as the training does (no orphan issues).
+from godot_server import start_server_in_thread, stop_server_in_thread
 from train import (
     HIDDEN_DIM, NUM_ACTIONS, GAMMA, GAE_LAMBDA, CLIP_EPSILON,
     LEARNING_RATE, VALUE_LOSS_COEF, MAX_GRAD_NORM, ENTROPY_COEF,
@@ -351,11 +359,77 @@ def multi_agent_full_display(tick, adam_rt, eve_rt, env, vocab_logger):
 # Main multi-agent life loop
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _respawn_adam(adam_rt, env, device, first_contact: bool):
+    """Respawn Adam after death: fresh body stats, same brain/vocab/personality.
+    Used in --respawn mode to enable long stress-test runs (50k+ ticks)."""
+    # Reset env (generates fresh world state, fresh adam_stats, fresh biome)
+    world_state, adam_stats = env.reset()
+    adam_rt.stats = adam_stats
+    adam_rt.x = env.adam_x
+    adam_rt.y = env.adam_y
+    adam_rt.alive = True
+    adam_rt.death_cause = None
+    adam_rt.tick = 0  # age resets, but brain stays
+    adam_rt.action_counts = {a: 0 for a in WorldSim.ACTIONS}
+    adam_rt.action_history = []
+    adam_rt.recent_actions = []
+    adam_rt.episode_intrinsic_reward = 0.0
+    adam_rt.clear_ppo_buffer()
+    adam_rt.init_hidden()  # fresh GRU state (memories of past life fade)
+    # Recompute initial sensory input for new position
+    init_phase5 = adam_rt.thought_engine.get_phase5_signals(world_state, adam_stats)
+    if first_contact:
+        adam_rt.sensory_input = encode_sensory_input_multi(
+            world_state, adam_stats,
+            fear_signal=init_phase5['fear_signal'],
+            pleasure_signal=init_phase5['pleasure_signal'],
+            pattern_confidence=init_phase5['pattern_confidence'],
+            other_presence=0.0,
+            other_last_action_idx=-1,
+        ).to(device)
+    else:
+        adam_rt.sensory_input = encode_sensory_input(
+            world_state, adam_stats,
+            fear_signal=init_phase5['fear_signal'],
+            pleasure_signal=init_phase5['pleasure_signal'],
+            pattern_confidence=init_phase5['pattern_confidence'],
+        ).to(device)
+    return world_state
+
+
+def _respawn_eve(eve_rt, eve_agent, env, device, first_contact: bool):
+    """Respawn Eve after death: fresh body stats, same brain/vocab/personality."""
+    # Reset Eve's body stats to defaults (birth() doesn't do this)
+    eve_agent.stats = {
+        'health': 100.0,
+        'hunger': 0.0,
+        'thirst': 0.0,
+        'energy': 100.0,
+        'stress': 0.0,
+        'pain': 0.0,
+    }
+    eve_agent.birth(adam_x=env.adam_x, adam_y=env.adam_y)
+    eve_rt.x = eve_agent.x
+    eve_rt.y = eve_agent.y
+    eve_rt.stats = eve_agent.stats
+    eve_rt.alive = True
+    eve_rt.death_cause = None
+    eve_rt.tick = 0
+    eve_rt.action_counts = {a: 0 for a in WorldSim.ACTIONS}
+    eve_rt.action_history = []
+    eve_rt.recent_actions = []
+    eve_rt.episode_intrinsic_reward = 0.0
+    eve_rt.clear_ppo_buffer()
+    eve_rt.init_hidden()
+    eve_rt.sensory_input = eve_agent.sensory_input
+
+
 def run_multi_agent_life(
     learned_only: bool = False,
     max_ticks: int = None,
     tick_delay: float = TICK_DELAY,
     first_contact: bool = False,
+    respawn: bool = False,
 ):
     """
     Run Adam and Eve in the same world simultaneously.
@@ -368,6 +442,10 @@ def run_multi_agent_life(
         first_contact: v1.0 mode — extend sensory input to 23 dims so each agent's
                        PPO can observe the other's last action. This enables true
                        interaction learning (Eve can learn to react to Adam).
+        respawn: If True, dead agents respawn after 1 tick with fresh stats but
+                 the SAME brain (knowledge persists across lives). This enables
+                 long stress-test runs (50k+ ticks) without single-life death
+                 ending the simulation. Default False (single-life mode).
     """
     DEVICE = torch.device("cpu")
 
@@ -451,6 +529,30 @@ def run_multi_agent_life(
     tb_logger = TBLogger(log_dir="runs/nafs_multi_agent")
     ws_bridge = WSBridge()
     ws_bridge.start()
+
+    # ── Phase 4-13 Engine Orchestrator ─────────────────────────────────────
+    # Bundles GrowingBrain, ReproductionEngine, MathIntuitionEngine,
+    # FirstContactEngine, SocialEngine, CultureEngine, EvolutionTracker,
+    # EventLogSystem, LineageDatabase, WorldEvolution, DiseaseEvolution,
+    # NoveltyDetector, WorldSeeding, GodotBridge — all wired into one object
+    # that the training loop calls at the right hooks.
+    orchestrator = EngineOrchestrator(env, device=str(DEVICE), seed=42)
+    orchestrator.register_agent(
+        agent_id="adam", parents=[], generation=1, birth_tick=0,
+        biome=world_state.get("biome", "plains"),
+    )
+    orchestrator.register_agent(
+        agent_id="eve", parents=[], generation=1, birth_tick=0,
+        biome=eve_agent.current_biome,
+    )
+    print(f"  \U0001f9ee Phase 4-13 engines wired: " 
+          f"{sum(orchestrator.get_summary()['engines'].values())}/13 active",
+          flush=True)
+
+    # Phase 11: Start Godot HTTP server in background thread (lives for the
+    # duration of training). Godot client polls http://localhost:5000/state.
+    start_server_in_thread(port=5000, host="0.0.0.0",
+                            state_file=orchestrator.godot_state_path)
 
     # Send birth events
     ws_bridge.send_birth_data({
@@ -689,6 +791,87 @@ def run_multi_agent_life(
                             meaning=meaning, trigger=trigger, context=ctx,
                         )
 
+                # ═══ PHASE 4-13 ORCHESTRATOR HOOK ═══
+                # Drives GrowingBrain loss checks, ReproductionEngine fertility
+                # + pregnancy, MathIntuitionEngine step, FirstContactEngine
+                # contact detection + vocab contact, SocialEngine relationship
+                # updates, CultureEngine observational learning + proto-tool
+                # detection, EvolutionTracker behavior recording + speciation
+                # + cataclysm checks + OEE criteria, EventLogSystem + lineage
+                # DB writes, WorldEvolution + DiseaseEvolution + NoveltyDetector
+                # + WorldSeeding snapshots, GodotBridge state serialization.
+                try:
+                    babies = orchestrator.get_babies()
+                    orch_events = orchestrator.on_tick(
+                        tick=tick, adam_rt=adam, eve_rt=eve, babies=babies,
+                        adam_action=adam_action, eve_action=eve_action,
+                        adam_reward=adam_reward, eve_reward=eve_reward,
+                        world_state=world_state,
+                    )
+                    # Surface notable events in the console
+                    for ev in orch_events.get("events", []):
+                        etype = ev.get("type", "")
+                        if etype == "FIRST_CONTACT":
+                            pass  # already printed by orchestrator
+                        elif etype == "BIRTH":
+                            pass  # already printed
+                        elif etype == "PREGNANCY_STARTED":
+                            pass  # already printed
+                        elif etype == "EXTINCTION":
+                            pass  # already printed
+                        elif etype == "SPECIATION":
+                            print(f"  \U0001f9ec SPECIATION event at tick {tick}: "
+                                  f"{ev['details'].get('reason', 'unknown')}",
+                                  flush=True)
+                        elif etype == "OEE_CHECK":
+                            oee = ev["details"]
+                            print(f"  \U0001f9ee OEE check at tick {tick}: "
+                                  f"{oee.get('criteria_met', 0)}/"
+                                  f"{oee.get('criteria_total', 5)} Packard "
+                                  f"criteria met "
+                                  f"(achieved: {oee.get('oee_achieved', False)})",
+                                  flush=True)
+                except Exception as e:
+                    # Orchestrator must never break the training loop
+                    print(f"  \u26a0\ufe0f Orchestrator on_tick error: {e}",
+                          flush=True)
+
+                # Hook: tell orchestrator about Adam's EAT action so it can
+                # update MathIntuitionEngine.consume_food + CultureEngine
+                # cooking detection.
+                if adam_action == "EAT":
+                    try:
+                        food_type = "unknown"
+                        if (env.chemistry is not None and
+                                env.chemistry.has_food_at(adam.x, adam.y)):
+                            food_info = env.chemistry.get_food_at(adam.x, adam.y)
+                            food_type = food_info.get("type", "unknown")
+                        orchestrator.on_eat("adam", food_type, adam.x, adam.y, tick)
+                    except Exception:
+                        pass
+                if eve_action == "EAT":
+                    try:
+                        orchestrator.on_eat("eve", "unknown", eve.x, eve.y, tick)
+                    except Exception:
+                        pass
+
+                # Hook: new word discoveries (already printed above, but tell
+                # orchestrator so it can fire FIRST_WORD event + culture record)
+                if "new_words" in adam_experience:
+                    for entry in adam_experience["new_words"]:
+                        word = entry["word"] if isinstance(entry, dict) else entry[0]
+                        meaning = entry["meaning"] if isinstance(entry, dict) else entry[1]
+                        orchestrator.on_new_word("adam", word, meaning, tick)
+                if getattr(eve, 'latest_new_words', None):
+                    for entry in eve.latest_new_words:
+                        if isinstance(entry, dict):
+                            word = entry.get("word", "")
+                            meaning = entry.get("meaning", "")
+                        else:
+                            word, meaning = entry[0], entry[1]
+                        if word:
+                            orchestrator.on_new_word("eve", word, meaning, tick)
+
                 # ═══ VOCAB DIVERGENCE LOGGING ═══
                 if vocab_logger.should_log(tick):
                     adam_vocab = adam.thought_engine.get_vocabulary()
@@ -849,6 +1032,26 @@ def run_multi_agent_life(
                                 "eve_value_loss": eve_ppo['value_loss'],
                                 "eve_entropy": eve_ppo['entropy'],
                             })
+
+                    # Phase 4: notify orchestrator about PPO losses so it can
+                    # feed them to GrowingBrain (if an agent has one attached)
+                    # and to EvolutionTracker for behavior correlation.
+                    if adam_ppo:
+                        try:
+                            orchestrator.on_ppo_update(
+                                "adam", adam_ppo["policy_loss"], tick,
+                            )
+                            orchestrator.check_growing_brain("adam", adam, tick)
+                        except Exception:
+                            pass
+                    if eve_ppo:
+                        try:
+                            orchestrator.on_ppo_update(
+                                "eve", eve_ppo["policy_loss"], tick,
+                            )
+                            orchestrator.check_growing_brain("eve", eve, tick)
+                        except Exception:
+                            pass
                 else:
                     # Still need to update Adam's sensory_input for next tick
                     if not adam_done:
@@ -903,11 +1106,65 @@ def run_multi_agent_life(
                                        "starvation" if adam.stats.get('hunger', 0) >= 100 else \
                                        "exhaustion"
                     print(f"\n  \U0001f480 Adam died at tick {tick}: {adam.death_cause}", flush=True)
+                    # Phase 12: notify orchestrator so it can fire DEATH event
+                    # + lineage DB update + reproduction.record_death.
+                    try:
+                        orchestrator.on_death(
+                            "adam", tick, cause=adam.death_cause,
+                            stats={
+                                "health": adam.stats.get("health", 0),
+                                "hunger": adam.stats.get("hunger", 0),
+                                "energy": adam.stats.get("energy", 0),
+                                "total_reward": adam.total_reward,
+                                "vocab_size": len(adam.thought_engine.get_vocabulary()),
+                            },
+                        )
+                    except Exception as e:
+                        print(f"  \u26a0\ufe0f Orchestrator on_death error: {e}",
+                              flush=True)
+
+                    # Respawn Adam (keep brain + memory + vocab — fresh body)
+                    if respawn:
+                        try:
+                            _respawn_adam(adam, env, DEVICE, first_contact)
+                            print(f"  \U0001f476 Adam respawned at "
+                                  f"({adam.x}, {adam.y}) — brain preserved, "
+                                  f"vocab={len(adam.thought_engine.get_vocabulary())}",
+                                  flush=True)
+                        except Exception as e:
+                            print(f"  \u26a0\ufe0f Adam respawn failed: {e}",
+                                  flush=True)
 
                 if eve_done:
                     eve.alive = False
                     eve.death_cause = eve_result.get('death_cause', 'unknown')
                     print(f"\n  \U0001f480 Eve died at tick {tick}: {eve.death_cause}", flush=True)
+                    try:
+                        orchestrator.on_death(
+                            "eve", tick, cause=eve.death_cause,
+                            stats={
+                                "health": eve.stats.get("health", 0),
+                                "hunger": eve.stats.get("hunger", 0),
+                                "energy": eve.stats.get("energy", 0),
+                                "total_reward": eve.total_reward,
+                                "vocab_size": len(eve.thought_engine.get_vocabulary()),
+                            },
+                        )
+                    except Exception as e:
+                        print(f"  \u26a0\ufe0f Orchestrator on_death error: {e}",
+                              flush=True)
+
+                    # Respawn Eve (keep brain + memory + vocab — fresh body)
+                    if respawn:
+                        try:
+                            _respawn_eve(eve, eve_agent, env, DEVICE, first_contact)
+                            print(f"  \U0001f9dd Eve respawned at "
+                                  f"({eve.x}, {eve.y}) — brain preserved, "
+                                  f"vocab={len(eve.thought_engine.get_vocabulary())}",
+                                  flush=True)
+                        except Exception as e:
+                            print(f"  \u26a0\ufe0f Eve respawn failed: {e}",
+                                  flush=True)
 
                 # Update world state for next tick
                 world_state = next_world_state
@@ -927,6 +1184,19 @@ def run_multi_agent_life(
     finally:
         # ── Death / cleanup ─────────────────────────────────────────────────
         elapsed_min = (time.time() - life_start) / 60
+
+        # Phase 4-13: finalize orchestrator (writes orchestrator_summary.json,
+        # final oee_status.json, and prints OEE criteria status).
+        try:
+            orchestrator.finalize()
+        except Exception as e:
+            print(f"  \u26a0\ufe0f Orchestrator finalize error: {e}", flush=True)
+
+        # Phase 11: Stop the embedded Godot HTTP server.
+        try:
+            stop_server_in_thread()
+        except Exception:
+            pass
 
         # Final vocab divergence summary
         vocab_logger.summary()
@@ -1027,6 +1297,9 @@ if __name__ == "__main__":
                         help="Cap on total ticks (for testing)")
     parser.add_argument("--tick-delay", type=float, default=TICK_DELAY,
                         help=f"Seconds between ticks (default {TICK_DELAY})")
+    parser.add_argument("--respawn", action="store_true",
+                        help="Respawn dead agents with fresh body + same brain "
+                             "(enables 50k+ tick stress tests; default single-life mode)")
     args = parser.parse_args()
 
     run_multi_agent_life(
@@ -1034,4 +1307,5 @@ if __name__ == "__main__":
         max_ticks=args.max_ticks,
         tick_delay=args.tick_delay,
         first_contact=args.first_contact,
+        respawn=args.respawn,
     )

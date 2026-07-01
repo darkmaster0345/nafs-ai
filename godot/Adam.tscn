@@ -1,0 +1,40 @@
+[gd_scene load_steps=6 format=3 uid="uid://dadamagent"]
+
+[ext_resource type="Script" path="res://Adam.gd" id="1_adam_script"]
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_1"]
+radius = 16.0
+height = 48.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_interaction"]
+radius = 60.0
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_food"]
+radius = 120.0
+
+[node name="Adam" type="CharacterBody2D" groups=["adam"]]
+collision_layer = 2
+script = ExtResource("1_adam_script")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CapsuleShape2D_1")
+
+[node name="InteractionArea" type="Area2D" parent="."]
+collision_mask = 13
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="InteractionArea"]
+shape = SubResource("CircleShape2D_interaction")
+debug_color = Color(0.7, 0, 0, 0.42)
+
+[node name="FoodArea" type="Area2D" parent="."]
+collision_mask = 8
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="FoodArea"]
+shape = SubResource("CircleShape2D_food")
+debug_color = Color(0, 0.7, 0, 0.42)
+
+[node name="NavigationAgent2D" type="NavigationAgent2D" parent="."]
+avoidance_enabled = true
+radius = 20.0

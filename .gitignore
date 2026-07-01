@@ -61,3 +61,9 @@ manus_original/
 
 # Legacy v0.1 (archived — kept in legacy/ for reference)
 # legacy/
+
+# Phase 4-13 orchestrator runtime artifacts (regenerated each run)
+godot_state.json
+oee_status.json
+orchestrator_summary.json
+orchestrator_errors.jsonl
