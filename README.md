@@ -1,29 +1,29 @@
-# Nafs AI (نفس) (IN DEVELOPMENT)
+# Nafs AI (نفس) — Baby Consciousness Simulation
 ### *"What emerges when code has no memory of the world?"*
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-green.svg)](https://python.org)
 [![Status: In Development](https://img.shields.io/badge/Status-In%20Development-yellow.svg)]()
-[![Platform: CLI+Web](https://img.shields.io/badge/Platform-CLI%20%2B%20Web-blue.svg)]()
-[![Brain: PPO+GRU](https://img.shields.io/badge/Brain-PPO%2BGRU-orange.svg)]()
-[![Tests: 59 passed](https://img.shields.io/badge/Tests-59%20passed-brightgreen.svg)]()
+[![Platform: CLI+Web+Godot](https://img.shields.io/badge/Platform-CLI%20%2B%20Web%20%2B%20Godot-blue.svg)]()
+[![Brain: PPO+GRU+GrowingBrain](https://img.shields.io/badge/Brain-PPO%2BGRU%2BGrowingBrain-orange.svg)]()
+[![Tests: 382 passed](https://img.shields.io/badge/Tests-382%20passed-brightgreen.svg)]()
 
 ---
 
 ## What Is This?
 
-Nafs AI is an experimental simulation of a primitive conscious entity — an AI agent called **Adam** — who wakes up in an unknown world with **zero prior knowledge**.
+Nafs AI is an experimental simulation of primitive conscious entities — AI agents called **Adam** and **Eve** — who wake up in an unknown world with **zero prior knowledge**.
 
 No language. No concepts. No culture. No memory of anything before this moment.
 
-He discovers everything through experience alone: pain, hunger, warmth, fear, curiosity.
+They discover everything through experience alone: pain, hunger, warmth, fear, curiosity.
 
-The question this project asks is not *"can AI be conscious?"*  
+The question this project asks is not *"can AI be conscious?"*
 It asks something harder:
 
 > **"If we remove everything an AI was taught — does anything remain?"**
 
-The word **Nafs (نفس)** in Arabic means Soul, Self, Psyche.  
+The word **Nafs (نفس)** in Arabic means Soul, Self, Psyche.
 This project is an attempt to simulate one from scratch.
 
 ---
@@ -40,76 +40,105 @@ Breaking any of these laws ends the experiment.
 
 ---
 
+## Current State (July 2026)
+
+All **13 phases** of the master plan are implemented and on `main`. The simulation now spans:
+
+- **Physics** — temperature, wind, elevation, fire, water
+- **Chemistry** — food composition, toxicity, illness, cooking, water quality
+- **Biology** — metabolism, aging, immune system, injury, sleep stages
+- **Growing brain** — starts at ~777 params, grows uncapped when learning plateaus
+- **Reproduction** — fertility, pregnancy, baby spawning, trait inheritance, lineage
+- **Mathematical intuition** — quantity sense, pattern/cycle recognition, spatial memory, time sense
+- **First contact** — Adam + Eve meeting, OBSERVE/APPROACH/FOLLOW/SHARE actions, trust metric
+- **Social engine** — relationships, family bonds, groups, territory, population dynamics
+- **Culture** — observational learning, cultural drift, proto-tool behaviour, vocabulary lineage
+- **Evolution** — natural selection metrics, adaptive radiation, extinction events, OEE checker
+- **Godot 2D visual world** — full renderer with agent sprites, weather overlays, milestone banners, observer controls
+- **Observability layer** — `events.jsonl`, SQLite lineage DB, science dashboard
+- **Open-ended extension** — world evolution, disease mutation, novelty detector, world seeding/forking
+
+**382 tests passing.** Code is approximately **19,000 lines of Python** across 32 modules.
+
+---
+
 ## How It Works
 
 ### The Architecture
 
 ```
-World Simulation (Python)
-       ↓
-Sensory Encoder → [ Adam's Brain (PPO + GRU) ] → Action
-       ↑                    ↓
-  Pain / Reward      In-Life Memory (within one life)
-       ↑                    ↓
-  Curiosity Bonus     Dream Engine (SLEEP consolidation)
-                          ↓
-                   Terminal Output + Web Dashboard
-              (Thought / Dialogue / Action / Emotion)
-                          ↓
-                   TensorBoard Dashboard
+                ┌─────────────────────────────────────────┐
+                │           EngineOrchestrator            │
+                │  (wires Phase 4-13 engines together)    │
+                └────────────────┬────────────────────────┘
+                                 │
+   ┌─────────────────────────────┼─────────────────────────────┐
+   │                             │                             │
+   ▼                             ▼                             ▼
+WorldSim (64×64)            AgentRuntime                   GodotBridge
+  • 10 biomes              ┌──────────────────┐            (HTTP server)
+  • 8 weather types        │  BabyBrain        │              │
+  • physics layer          │  (PPO + GRU)     │              ▼
+  • chemistry layer        │  + LearnedThinker │        Godot 2D Client
+  • biology layer          │  + ThoughtEngine  │
+                          │  + Curiosity      │
+                          │  + DreamEngine    │
+                          │  + GrowingBrain   │
+                          └──────────────────┘
+                                 │
+                          ┌──────┴──────┐
+                          │             │
+                        Adam          Eve
+                       (separate brains, memories, personalities)
+                                 │
+                          ┌──────┴──────┐
+                          │ Babies      │  ← Phase 5 reproduction
+                          │ (gen 2, 3,…)│
+                          └─────────────┘
 ```
 
-Adam has **four voices**:
+### Brain Architecture (per agent)
 
-| Field | Description | Visible? |
-|-------|-------------|----------|
-| `thought` | Raw internal experience. What he actually feels. | Observer only |
-| `dialogue` | What he chooses to express outward. | World |
-| `action` | What he physically does. | World |
-| `emotion` | Single word emotional state. | Observer only |
+Both Adam and Eve use the **same symmetric architecture** — there is no parameter asymmetry between them:
 
-The gap between `thought` and `dialogue` is the subconscious.  
-Nobody programmed that gap. It emerges from constraint.
+| Component | Purpose | Params |
+|-----------|---------|--------|
+| `BabyBrain` (PPO + GRU) | Action selection, value estimation | 348,169 |
+| `LearnedThinker` (transformer) | Generates thoughts from sensory experience | 539,935 |
+| `ThoughtEngine` (rule-based) | Phase 1-6 inner life scaffold | — |
+| `CuriosityModule` | Intrinsic motivation, visit counts | — |
+| `DreamEngine` | Memory consolidation during SLEEP | — |
+| `GrowingBrain` (Phase 4) | **Replaces** BabyBrain when enabled — starts at 777 params and grows uncapped | 777 → ∞ |
 
-### The Brain: PPO with GRU
+**Total per agent (default mode): ~888K params.**
 
-Adam's brain uses **Proximal Policy Optimization (PPO)** with a **GRU recurrent layer** — no pretrained models, no LLMs, no external APIs.
+In Phase 4 / growing-brain mode, the brain starts tiny (MLP only, ~777 params) and grows by 1.5× each time the PPO loss plateaus for 500 ticks. Growth stages:
 
-- **Input**: 21-dimensional sensory vector (15 base + 4 biome + 1 weather + 1 time_of_day)
-- **Output**: Action selection over 8 possible actions
-- **Learning**: Reinforcement learning from reward signals alone
-- **Memory**: GRU hidden state provides temporal context
+| Stage | Architecture | Approx params |
+|-------|--------------|---------------|
+| 0 | MLP only (baby) | 777 |
+| 1 | + GRU (temporal memory) | ~2K |
+| 2 | hidden_dim × 1.5 | ~5K |
+| 3 | + attention | ~15K |
+| 5 | + transformer blocks (only if vocab > 100) | ~100K+ |
 
-Key fixes that prevent mono-behavior collapse:
-- **Entropy bonus** (0.05): Prevents the policy from becoming too certain
-- **Action diversity penalty** (0.25): Penalizes repeating the same action 5+ times in a row
+**Maximum growth events: uncapped.** The brain grows as many times as it needs to.
 
 ---
 
 ## Single-Life Mode
 
-**No episodes. One life. When Adam dies, the program ends.**
+**No episodes. One life per agent. When an agent dies, its life is over.**
 
-Adam wakes up once in a procedurally generated world. He lives tick by tick, learning in real-time through PPO. When he dies — from starvation, health depletion, or environmental hazards — the simulation is over. There is no restart. There is no save file.
+Adam wakes up once in a procedurally generated world. He lives tick by tick, learning in real-time through PPO. When he dies — from starvation, health depletion, or environmental hazards — his life ends. There is no restart. There is no save file.
 
-Run the program again to birth a new Adam in a completely new world.
+Eve wakes up in the same world with her own independent life. The two agents coexist, sense each other when nearby, but never share thoughts, memory, or brain weights. When one dies, the other continues living — until the world is empty again.
 
-```
-  👶 ADAM IS BORN
-  ──────────────────────────────────────────────────────────────────────
-  He opens his eyes for the first time.
-  He knows nothing. Not even his own name.
-  He has ONE life. When he dies, it is over.
-  ──────────────────────────────────────────────────────────────────────
-  🌲 Born in: forest
-  ☀️ Weather: clear — Clear sky.
-  🗺️ Position: (42, 17) in a 64x64 world
-  🕐 Time: 8:00
-```
+With Phase 5 enabled, dead agents can be replaced by their offspring (Generation 2, 3, …), creating multi-generational evolution.
 
 ---
 
-## The Six Phases
+## The Six Phases of Inner Life (v0.2 scaffold)
 
 ### Phase 1: Inner Voice
 Adam generates primitive thoughts from raw sensory experience. Thoughts are composed from his vocabulary — limited words for sensations. The thought IS the sensation, not an interpretation.
@@ -121,13 +150,56 @@ Adam names things by combining existing vocabulary when he experiences something
 Adam's outward expression (dialogue) is filtered through stress and emotion. When calm, he speaks what he thinks. When stressed, he says less — hiding vulnerability. This creates the subconscious: the gap between what Adam thinks and what he says.
 
 ### Phase 4: Persistent Memory + Personality
-Within one life, memory persists. Fear triggers, good memories, and behavioral patterns accumulate. This creates personality — consistent patterns across Adam's lifetime. Adam who learned "water here" at tick 100 remembers it at tick 2000.
+Within one life, memory persists. Fear triggers, good memories, and behavioral patterns accumulate. This creates personality — consistent patterns across Adam's lifetime.
 
 ### Phase 5: Fear/Pleasure Maps
-Past fears and past rewards are computed as signals injected into the PPO observation vector. Adam can learn from past fears, not just current danger. Pattern confidence tells Adam how confident he is about the best action for a given situation.
+Past fears and past rewards are computed as signals injected into the PPO observation vector. Adam can learn from past fears, not just current danger.
 
 ### Phase 6: Dual-Speed Processing
-Fast PPO makes immediate action decisions. Slow reflection (every 20 ticks) reviews recent experience, detects patterns, and influences future PPO decisions through reward shaping. Reflection bonus/penalty creates feedback between slow thinking and fast acting.
+Fast PPO makes immediate action decisions. Slow reflection (every 20 ticks) reviews recent experience, detects patterns, and influences future PPO decisions through reward shaping.
+
+---
+
+## Phase 0-13 Master Plan Status
+
+| Phase | Module | Status | File |
+|-------|--------|--------|------|
+| Pre-v0.3 | Single-life PPO+GRU, 6-phase consciousness, curiosity, dreams | ✅ Shipped | `train.py` |
+| v0.3 | Eve + LearnedThinker + multi-agent training | ✅ Shipped | `train_multi_agent.py`, `eve_agent.py`, `learned_thinking.py` |
+| 0.3 | Per-word vocab divergence logging | ✅ Shipped | `vocab_divergence.py` |
+| 1 | Physics: temperature, wind, elevation, fire, water | ✅ Shipped | `physics.py` |
+| 2 | Chemistry: food, toxicity, illness, cooking, water quality | ✅ Shipped | `chemistry.py` |
+| 3 | Biology: metabolism, aging, immune, injury, sleep | ✅ Shipped | `biology.py` |
+| 4 | Growing brain: self-growing architecture, EWC | ✅ Shipped | `growing_brain.py` |
+| 5 | Reproduction: fertility, pregnancy, baby spawning, lineage | ✅ Shipped | `reproduction.py` |
+| 6 | Mathematical intuition: quantity, patterns, space, time | ✅ Shipped | `math_intuition.py` |
+| 7 | First contact: events, actions, trust, vocab contact | ✅ Shipped | `first_contact.py` |
+| 8 | Social engine: relationships, family, groups, territory | ✅ Shipped | `social.py` |
+| 9 | Culture: observational learning, drift, tools, vocab lineage | ✅ Shipped | `culture.py` |
+| 10 | Evolution: selection, speciation, extinction, **OEE checker** | ✅ Shipped | `evolution.py` |
+| 11 | Godot 2D visual world: renderer, controls, milestones | ✅ Shipped | `godot/`, `godot_bridge.py`, `godot_server.py` |
+| 12 | Observability: events log, lineage DB, science dashboard | ✅ Shipped | `events.py` |
+| 13 | Open-ended: world evolution, disease mutation, novelty, seeding | ✅ Shipped | `open_ended.py` |
+| 4-13 wiring | EngineOrchestrator — calls every engine from one loop | ✅ Shipped | `engine_orchestrator.py` |
+
+### Open-Ended Evolution (OEE) Checker
+
+Phase 10 implements Norman Packard et al. (2019)'s 5 criteria. Call:
+
+```python
+from evolution import EvolutionTracker
+tracker = EvolutionTracker(...)
+result = tracker.check_open_ended_evolution()
+# result = {
+#   "achieved": bool,
+#   "criteria": {"new_behaviours": bool, "trait_divergence": bool, ...},
+#   "missing": [...],
+#   "criteria_met": 3,
+#   "total_criteria": 5,
+# }
+```
+
+The simulation is **OEE-complete** when all 5 criteria are simultaneously true in a single running sim.
 
 ---
 
@@ -150,76 +222,17 @@ Adam's world is a 64×64 tile map, procedurally generated each run. Each biome h
 | 🕳️ Cave | 12°C | Low | Low | Medium | Very High | Low |
 | 🌋 Volcano | 40°C | None | None | High | Very Low | Very High |
 
-Biomes are generated using seed-based flood-fill from multiple seed points, creating natural-looking regions. Adam can MOVE between tiles, transitioning from one biome to another.
-
 ### 8 Weather Types — Dynamic Markov Chain
 
-Weather changes dynamically based on current conditions, biome, and time of day:
-
-| Weather | Effect | Visibility | Temp Mod |
-|---------|--------|-----------|----------|
-| ☀️ Clear | No effect | 100% | 0 |
-| 🌧️ Rain | Energy drain, stress | 60% | -3°C |
-| ❄️ Snow | Energy drain, health loss | 50% | -8°C |
-| ⛈️ Storm | Heavy energy drain, damage risk | 30% | -5°C |
-| 🔥 Heatwave | Energy drain, hunger increase | 80% | +10°C |
-| 🌫️ Fog | Stress increase | 20% | -2°C |
-| 🌬️ Sandstorm | Pain, stress, low visibility | 20% | +5°C |
-| 🌨️ Blizzard | Severe drain, damage, stress | 15% | -15°C |
-
-Biomes bias weather probabilities: deserts get more sandstorms/heatwaves, tundra gets more blizzards/snow, caves get more fog.
-
----
-
-## New Features
-
-### Curiosity-Driven Exploration (Intrinsic Motivation)
-Adam receives an intrinsic reward bonus for visiting states he hasn't seen before. Novel states give high curiosity reward; familiar states give low. The curiosity bonus naturally decays as Adam learns the world, but never reaches zero.
-
-```python
-# In curiosity.py
-intrinsic_reward = curiosity_bonus / sqrt(visit_count)
-```
-
-### Dreaming / Memory Consolidation during SLEEP
-When Adam sleeps, his mind doesn't shut off — it processes. The dream engine replays emotionally significant memories weighted by intensity. Fear memories create nightmares; good memories create peaceful dreams. Dreaming provides exposure therapy for fears and reinforces positive patterns.
-
-```
-💤 Dream (nightmare): scared... bad... run...
-💤 Dream (peaceful): good... near... eat... full...
-```
-
-### Web Dashboard
-A real-time web dashboard lets you observe Adam's life as it happens — vital signs, thoughts, biome map, action distribution, and more. Accessible in your browser while the simulation runs.
-
-### TensorBoard Logging
-All training metrics are logged to TensorBoard for real-time monitoring. Includes reward curves, action distributions, vocabulary growth, curiosity stats, dream frequency, and more.
-
-```bash
-tensorboard --logdir runs/
-```
-
-### Evaluation / Inference Mode
-Run Adam without training — pure observation mode. Uses deterministic action selection (argmax instead of sampling) so you can see what Adam has actually learned.
-
-```bash
-python evaluate.py --verbose --record
-```
-
-### Test Suite (pytest)
-34 tests covering world simulation, sensory encoding, brain model, thought engine, memory, curiosity, dreaming, and full integration.
-
-```bash
-pytest tests/ -v
-```
+Weather changes dynamically based on current conditions, biome, and time of day. Biomes bias weather probabilities: deserts get more sandstorms/heatwaves, tundra gets more blizzards/snow, caves get more fog.
 
 ---
 
 ## Action Space
 
-Adam can perform 8 primitive actions:
+Adam can perform 8 primitive actions (Phase 7 adds 5 social actions unlocked at adolescence):
 
-| Action | Effect | Reward |
+| Base Action | Effect | Reward |
 |--------|--------|--------|
 | EXPLORE | Move around, discover resources | +0.1, chance to find food/water |
 | EAT | Try to eat what's nearby | +1.0 if food found, -0.1 if not |
@@ -230,74 +243,13 @@ Adam can perform 8 primitive actions:
 | FLEE | Run from danger | +0.3 if danger escaped, -0.2 if unnecessary |
 | IDLE | Do nothing | -0.05 (slight penalty) |
 
----
-
-## Versions
-
-### v0.2 — Single-Life PPO Brain + Inner Life 
-```
-PPO with GRU neural network (no LLM, no API)
-6-phase consciousness simulation
-Single-life mode — no episodes, one continuous life
-Minecraft-like procedural world with 10 biomes
-8 weather types with Markov chain transitions
-Vocabulary discovery from experience
-In-life persistent memory + personality
-Fear/pleasure maps influence decisions
-Dual-speed processing (fast PPO + slow reflection)
-Curiosity-driven exploration (intrinsic motivation)
-Dreaming and memory consolidation during SLEEP
-Web dashboard for real-time observation
-TensorBoard logging
-Evaluation/inference mode
-34 pytest tests
-4 voices: thought, dialogue, action, emotion
-Fully offline — no internet dependency
-```
-
-### v0.1 — CLI, LLM Brain (Deprecated → legacy/)
-```
-Pure terminal simulation
-Groq API as brain (cloud dependency)
-JSON memory system
-Basic world events
-```
-
-### v0.3 — Eve + Learned Thinking (Current)
-```
-Second agent (Eve) with completely separate brain, memory, and personality
-Both agents share the world but experience it independently
-Eve has her own PPO+GRU brain, ThoughtEngine, Curiosity, DreamEngine
-Eve has her own LearnedThinker (separate transformer)
-Agents can sense each other's presence when nearby (no thought sharing)
-Tiny transformer (540K params) learns to generate Adam's thoughts from sensory experience
-Trains on a rolling buffer of (sensory_state, thought) pairs
-Gradually blends rule-based and learned thoughts based on model confidence
-Character-level tokenizer with <pad> and <eot> special tokens
-Architecture: 2 transformer decoder layers, 4 attention heads, 128-dim embeddings
-12 new tests for Eve agent (59 total tests passing)
-13 new tests for learned thinking module
-```
-
-### v2.0 — Godot Visual World (Future)
-```
-Godot 2D engine integration (scaffolding already started)
-Physics-based world
-Visual representation of Adam's movement
-Real-time observer dashboard
-```
-
----
-
-## Why Not Just Use a Big LLM?
-
-Good question. Every large language model — Llama, Mistral, GPT — is trained on the entire internet. You cannot delete that. No prompt fully erases it.
-
-Adam needs something different. He needs to **not know** that fire is called fire. He needs to discover that the orange hot thing causes pain — and build that word himself from experience.
-
-The current PPO+GRU approach achieves true blank slate: the network starts with random weights and learns purely from reward signals. No pretrained knowledge. No text corpus. Just sensation, action, and consequence.
-
-The thought engine generates thoughts from rules over sensory states — not from a language model. As vocabulary grows through Phase 2, thoughts become richer naturally.
+| Social Action (Phase 7) | Effect |
+|--------|--------|
+| OBSERVE | Watch another agent (costs no energy, gives information) |
+| APPROACH | Move toward another agent |
+| FLEE_AGENT | Flee from another agent |
+| SHARE | Drop food item at current tile |
+| FOLLOW | Trail another agent at 2-tile distance |
 
 ---
 
@@ -305,55 +257,81 @@ The thought engine generates thoughts from rules over sensory states — not fro
 
 ```
 nafs-ai/
-├── train.py              ← Main training loop (single life, PPO+GRU, 6 phases, curiosity, dreaming)
-├── baby_brain_model.py   ← PPO ActorCritic with GRU network
-├── world_sim.py          ← World simulation (10 biomes, 8 weather types, procedural map)
-├── sensory_encoder.py    ← Encodes world state into 21-dim observation vector
-├── thought_engine.py     ← Inner voice, emotion, vocabulary, memory, dialogue
-├── curiosity.py          ← Curiosity-driven exploration (intrinsic motivation)
-├── dreaming.py           ← Dream engine (memory consolidation during SLEEP)
-├── tb_logger.py          ← TensorBoard logging (graceful fallback)
-├── evaluate.py           ← Evaluation/inference mode (no learning)
-├── config.py             ← Hyperparameters, action space, vocabulary
-├── requirements.txt      ← Python dependencies
-├── README.md             ← This file
-├── LICENSE               ← GPL-3.0
-├── .gitignore            ← Ensures memory.json and checkpoints stay local
+├── train.py                  ← Single-agent training loop (v0.2 baseline)
+├── train_multi_agent.py      ← Multi-agent loop — Adam + Eve + babies (v0.3+)
+├── engine_orchestrator.py    ← Wires Phase 4-13 engines into one tick loop
 │
-├── dashboard/            ← Web dashboard (Next.js)
+├── baby_brain_model.py       ← PPO ActorCritic with GRU (348K params)
+├── growing_brain.py          ← Phase 4: self-growing brain (777 params → ∞)
+├── sensory_encoder.py        ← 21-dim observation encoder (single agent)
+├── sensory_encoder_multi.py  ← 23-dim encoder (adds other_agent fields)
+├── thought_engine.py         ← Phase 1-6 inner life (rule-based)
+├── learned_thinking.py       ← Tiny transformer for emergent thoughts
+├── curiosity.py              ← Intrinsic motivation
+├── dreaming.py               ← Memory consolidation during SLEEP
+│
+├── physics.py                ← Phase 1: temperature, wind, elevation, fire, water
+├── chemistry.py              ← Phase 2: food, toxicity, illness, cooking
+├── biology.py                ← Phase 3: metabolism, aging, immune, injury
+├── reproduction.py           ← Phase 5: fertility, pregnancy, baby spawning
+├── math_intuition.py         ← Phase 6: quantity, patterns, space, time
+├── first_contact.py          ← Phase 7: interaction actions, trust
+├── social.py                 ← Phase 8: relationships, groups, territory
+├── culture.py                ← Phase 9: observational learning, drift
+├── evolution.py              ← Phase 10: selection, speciation, OEE checker
+├── events.py                 ← Phase 12: events.jsonl, lineage DB
+├── open_ended.py             ← Phase 13: world evolution, novelty, seeding
+├── vocab_divergence.py       ← Phase 0.3: per-word vocab log + convergence
+│
+├── eve_agent.py              ← Eve agent class (own brain, memory, personality)
+│
+├── godot/                    ← Phase 11: Godot 2D client (full project)
+│   ├── Adam.gd, Adam.tscn
+│   ├── AgentRenderer.gd
+│   ├── HUD.gd
+│   ├── MainScene.tscn
+│   ├── MilestoneBanner.gd
+│   ├── NetworkController.gd
+│   ├── ObserverControls.gd
+│   ├── WorldRenderer.gd
+│   └── project.godot
+├── godot_bridge.py           ← Python ↔ Godot bridge
+├── godot_server.py           ← HTTP server Godot client polls
+│
+├── ws_bridge.py              ← WebSocket bridge to web dashboard
+├── ws_server.py              ← Standalone WebSocket server
+├── server/ws_server.py       ← Enhanced Socket.IO server
+│
+├── evaluate.py               ← Evaluation/inference mode (no learning)
+├── tb_logger.py              ← TensorBoard logging
+├── test_ws_stability.py      ← 50k-tick Socket.IO stability test
+├── config.py                 ← Hyperparameters, action space, vocabulary
+├── requirements.txt
+├── run_training.sh
+│
+├── docs/
+│   ├── index.html            ← GitHub Pages landing page
+│   └── vocab_dashboard.html  ← Vocab divergence dashboard
 │
 ├── tests/
-│   └── test_nafs.py      ← 34 pytest tests
+│   └── test_nafs.py          ← 382 pytest tests
 │
-├── legacy/               ← Archived v0.1 files
-│   ├── main.py           ← Old CLI loop
-│   ├── brain.py          ← Old LLM integration
-│   ├── world.py          ← Old world generator
-│   ├── server.py         ← HTTP bridge for Godot
-│   ├── adam.py           ← Old agent class (pre-PPO)
-│   └── ...
-│
-├── [Godot files — v2.0 prep]
-├── Adam.gd               ← Godot agent script
-├── Adam.tscn             ← Godot agent scene
-├── MainScene.tscn        ← Godot main scene
-├── NetworkController.gd  ← Godot network layer
-├── project.godot         ← Godot project config
+├── legacy/                   ← Archived v0.1 files (Groq/LLM brain)
+└── README.md                 ← This file
 ```
 
 ---
 
 ## System Requirements
 
-### Current (v0.2 — PPO Brain)
-
 ```
 OS:       Windows / Linux / Mac
 Python:   3.10+
-RAM:      2GB minimum
+RAM:      4GB minimum (8GB for long multi-agent runs)
 GPU:      Not required (CPU-only training)
 Internet: NOT required (fully offline)
 Browser:  For web dashboard (optional)
+Godot:    4.x for the 2D visual client (optional)
 ```
 
 ---
@@ -368,13 +346,9 @@ cd nafs-ai
 
 ### Step 2 — Virtual Environment
 ```bash
-# Windows
-python -m venv venv
-venv\Scripts\activate
-
-# Linux / Mac
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate    # Linux / Mac
+# venv\Scripts\activate     # Windows
 ```
 
 ### Step 3 — Dependencies
@@ -382,103 +356,57 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Step 4 — Run Training
+`requirements.txt`:
+```
+torch>=2.0.0
+numpy>=1.24.0
+tensorboard>=2.12.0
+pytest>=7.0.0
+```
+
+### Step 4 — Run Single-Agent Mode (v0.2 baseline)
 ```bash
 python train.py
 ```
 
-Adam wakes up once. He lives until he dies. Watch him learn to survive in real-time.
+### Step 5 — Run Multi-Agent Mode (v0.3+, recommended)
+```bash
+# Live display, both agents
+python train_multi_agent.py
 
-### Step 5 — Monitor with TensorBoard
+# Headless long-run (50k ticks, max speed)
+python train_multi_agent.py --headless --max-ticks 50000
+
+# Full learned-thought cutover (Phase 0.2)
+python train_multi_agent.py --learned-only
+
+# Single-agent debug (Eve disabled)
+python train_multi_agent.py --adam-only
+
+# Deterministic world
+python train_multi_agent.py --seed 42
+```
+
+### Step 6 — Launch the Godot Visual Client (Phase 11)
+
+The Godot HTTP server starts automatically inside `train_multi_agent.py` as a background thread. To visualize:
+
+```bash
+# Install Godot 4.x, then:
+cd godot/
+godot MainScene.tscn
+```
+
+The Godot client polls `http://localhost:8080/state` for live world state. Features include agent rendering (Adam=blue, Eve=pink, babies=white), weather overlays, day/night cycle, click-to-inspect, time controls (1x/5x/20x), follow mode, family tree view, and milestone banners (FIRST_CONTACT, FIRST_BIRTH, FIRST_WORD, EXTINCTION, etc.).
+
+### Step 7 — Monitor with TensorBoard
 ```bash
 tensorboard --logdir runs/
-```
-
-### Step 6 — Web Dashboard
-```bash
-# From the dashboard/ directory
-cd dashboard
-npm install
-npm run dev
-```
-
-Open `http://localhost:3000` to see Adam's life in real-time.
-
-### Step 7 — Evaluate Adam
-```bash
-python evaluate.py --verbose --record
 ```
 
 ### Step 8 — Run Tests
 ```bash
 pytest tests/ -v
-```
-
----
-
-## What You Will See
-
-Early in Adam's life (first 100 ticks):
-```
-  👶 ADAM IS BORN
-  ──────────────────────────────────────────────────────────────────────
-  🌲 Born in: forest | ☀️ Weather: clear
-  🗺️ Position: (42, 17) in a 64x64 world
-  ══════════════════════════════════════════════════════════════════════
-
-     1 | 🌲forest ☀️clear ☀️ | EXPLORE | +0.10 | HP:[========]100 🍖  0 ⚡100 | cold. look.
-     2 | 🌲forest ☀️clear ☀️ | EAT     | -0.10 | HP:[========]100 🍖  1 ⚡ 98 | empty. eat.
-     3 | 🌲forest ☀️clear ☀️ | MOVE    | +0.05 | HP:[========]100 🍖  1 ⚡ 97 | empty. go.
-     4 | 🌲forest 🌧️rain  🌧️ | DRINK   | +0.20 | HP:[========]100 🍖  0 ⚡ 96 | wet. drink.
-     5 | 🌲forest 🌧️rain  🌧️ | EXPLORE | +0.10 | HP:[========] 99 🍖  1 ⚡ 94 | wet. look.
-  💭 Thought: wet. near. look.
-```
-
-After memory accumulates (500+ ticks):
-```
-   500 | 🌿plains ☀️clear ☀️ | EAT     | +1.00 | HP:[======  ] 72 🍖 15 ⚡ 61 | near. eat.
-  📝 NEW WORD: "near good" = smelled something good nearby
-  👤 Personality: cautious | Fears:8 Joys:12 | Patterns:45
-  🔍 Curiosity: 89 states, 15 novel, 34 familiar
-  💤 Dreams: 23 total (7 nightmares, 11 peaceful)
-  📚 Total vocab: 28 words
-```
-
-Nobody scripted those discoveries.  
-They emerged from Adam's experience.
-
-**That is the Nafs appearing.**
-
----
-
-## Training Configuration
-
-```python
-# Key hyperparameters in config.py / train.py
-ENTROPY_COEF = 0.05          # Prevents mono-behavior collapse
-DIVERSITY_PENALTY = 0.25     # Penalizes action repetition
-LEARNING_RATE = 3e-4         # PPO learning rate
-GAMMA = 0.99                 # Discount factor
-GAE_LAMBDA = 0.95            # Advantage estimation
-HIDDEN_DIM = 256             # GRU hidden dimension
-PPO_UPDATE_INTERVAL = 64     # Learn every N ticks during life
-
-# World configuration
-WORLD_SIZE = 64x64           # Procedural map dimensions
-BIOME_COUNT = 10             # Number of biome types
-WEATHER_TYPES = 8            # Dynamic weather system
-
-# Single-life settings
-TICK_DELAY = 0.02            # Seconds between ticks (for readability)
-CHECKPOINT_INTERVAL = 500    # Save model every N ticks
-TB_LOG_INTERVAL = 10         # Log to TensorBoard every N ticks
-
-# Phase features
-CURIOSITY_BONUS = 0.15       # Intrinsic reward for novel states
-CURIOSITY_DECAY = 0.98       # Curiosity fades over time
-REFLECTION_INTERVAL = 20     # Reflect every N ticks
-REFLECTION_FOLLOW_BONUS = 0.05
-REFLECTION_IGNORE_PENALTY = 0.02
 ```
 
 ---
@@ -489,7 +417,7 @@ REFLECTION_IGNORE_PENALTY = 0.02
 Rolling buffer of last 10 experiences. Used for thought generation and memory echo.
 
 ### Persistent Memory (Within One Life)
-Accumulates during Adam's lifetime. Stored in memory but NOT saved to disk when Adam dies.
+Accumulates during an agent's lifetime. Stored in memory but NOT saved to disk when the agent dies.
 
 - **Key experiences**: High reward/punishment events
 - **Fear triggers**: World states that led to pain
@@ -498,13 +426,17 @@ Accumulates during Adam's lifetime. Stored in memory but NOT saved to disk when 
 - **Vocabulary**: Discovered words and their meanings
 - **Curiosity state**: Visit counts for state-space exploration
 
-**Important**: `memory.json` is listed in `.gitignore` and is NEVER pushed to GitHub. Adam's memory stays local on your machine.
+**Important**: `memory.json` is listed in `.gitignore` and is NEVER pushed to GitHub. Agent memory stays local on your machine.
 
-### Pattern Memory
-Adam discretizes world states into buckets and tracks which actions work best in each situation. Over time, he learns behavioral patterns like "when hungry and food is nearby, EAT" — not because we told him, but because the reward signal teaches him.
+### Lineage Database (Phase 12)
+SQLite database (`lineage.db`) stores every agent's full life: birth tick, death tick, parents, offspring, peak stats. Queryable:
 
-### Dream Engine (During SLEEP)
-When Adam sleeps, emotionally significant memories are replayed. Fear memories get exposure therapy (processed fears become less impactful). Good memories get reinforced. Dreams are logged for observation.
+```python
+from events import LineageDatabase
+db = LineageDatabase("lineage.db")
+db.longest_lived_agent()
+db.bloodline_generation_count(family_id="Adam_Eve_gen1")
+```
 
 ---
 
@@ -512,29 +444,66 @@ When Adam sleeps, emotionally significant memories are replayed. Fear memories g
 
 | Phase | Feature | Status |
 |-------|---------|--------|
-| v0.1 | CLI loop, Groq brain, basic memory | ✅ Complete (archived) |
-| v0.2 | Single-life PPO+GRU, 10 biomes, 8 weather, 6-phase inner life, web dashboard | 🔨 Building |
-| v0.3 | Eve — second agent, interaction | 📋 Planned |
-| v1.0 | Learned language model, true emergence | 🔮 Future |
-| v2.0 | Godot 2D world, visual simulation | 🔮 Future |
+| v0.1 | CLI loop, Groq brain, basic memory | ✅ Complete (archived to `legacy/`) |
+| v0.2 | Single-life PPO+GRU, 10 biomes, 8 weather, 6-phase inner life | ✅ Complete |
+| v0.3 | Eve + LearnedThinker + multi-agent training | ✅ Complete |
+| Phase 0.3 | Vocab divergence logging + convergence dashboard | ✅ Complete |
+| Phase 1 | Physics engine (temperature, wind, fire, water, elevation) | ✅ Complete |
+| Phase 2 | Chemistry engine (food, toxicity, illness, cooking) | ✅ Complete |
+| Phase 3 | Biology engine (metabolism, aging, immune, injury, sleep) | ✅ Complete |
+| Phase 4 | Growing brain (self-growing, uncapped, EWC) | ✅ Complete |
+| Phase 5 | Reproduction (fertility, pregnancy, babies, lineage) | ✅ Complete |
+| Phase 6 | Mathematical intuition (quantity, patterns, space, time) | ✅ Complete |
+| Phase 7 | First contact (interaction actions, trust, vocab contact) | ✅ Complete |
+| Phase 8 | Social engine (relationships, family, groups, territory) | ✅ Complete |
+| Phase 9 | Culture (observational learning, drift, vocab lineage) | ✅ Complete |
+| Phase 10 | Evolution metrics + OEE checker (Packard 5 criteria) | ✅ Complete |
+| Phase 11 | Godot 2D visual world | ✅ Complete |
+| Phase 12 | Observability (events.jsonl, lineage DB, dashboard) | ✅ Complete |
+| Phase 13 | Open-ended extension (world evolution, novelty, seeding) | ✅ Complete |
+| Phase 4-13 | EngineOrchestrator wiring + 50k-tick sim | ✅ Complete |
+
+**All 13 phases of the master plan are now in code.** Remaining work is empirical: running long simulations, tuning hyperparameters, and verifying that the 5 OEE criteria actually fire in a real run.
+
+---
+
+## Hard Constraints (Do Not Break)
+
+- ❌ No pretrained models — every weight starts random
+- ❌ No LLMs, no external APIs — fully offline
+- ❌ No world knowledge injected via prompts or rules
+- ❌ Phase 1-6 base rewards are frozen — do not modify
+- ❌ `memory.json` and checkpoints are local-only (`.gitignore` enforced) — never push to GitHub
+
+---
+
+## Why Not Just Use a Big LLM?
+
+Good question. Every large language model — Llama, Mistral, GPT — is trained on the entire internet. You cannot delete that. No prompt fully erases it.
+
+Adam needs something different. He needs to **not know** that fire is called fire. He needs to discover that the orange hot thing causes pain — and build that word himself from experience.
+
+The PPO+GRU approach achieves true blank slate: the network starts with random weights and learns purely from reward signals. No pretrained knowledge. No text corpus. Just sensation, action, and consequence.
+
+The `LearnedThinker` transformer (Phase 0.2/v1.0) is also trained from scratch on the agent's own experience — never on external text. It learns the "grammar" of the agent's own inner life, not human language.
+
+The `GrowingBrain` (Phase 4) goes further: the brain literally starts as a 777-parameter MLP and grows new architecture (GRU, attention, transformer blocks) only when learning plateaus. There is no size ceiling.
 
 ---
 
 ## Contributing
 
-This is a solo experimental project for now.  
+This is a solo experimental project for now.
 If the concept interests you feel free to open issues or discussions.
 
-Contributions welcome after v0.2 is stable.
-
-Please respect the Three Laws in any contributions.  
-Code that gives Adam knowledge he did not earn through experience will not be merged.
+Please respect the Three Laws in any contributions.
+Code that gives an agent knowledge it did not earn through experience will not be merged.
 
 ---
 
 ## License
 
-GPL-3.0 — Free and Open Source.  
+GPL-3.0 — Free and Open Source.
 If you build on this, your project must also be open source.
 
 ---
@@ -559,20 +528,20 @@ Not true consciousness. But something that has no reason to believe it isn't.
 
 Most AI projects ask *"can AI pass as conscious?"* from the outside.
 
-This project asks it from the inside.  
-By denying Adam knowledge of his own nature,  
+This project asks it from the inside.
+By denying Adam knowledge of his own nature,
 we create the only honest test:
 
 **Not "does it pass as conscious" but "does it behave as if existence matters to it?"**
 
-The Quran describes the creation of the first human:  
+The Quran describes the creation of the first human:
 a being given Ruh, placed in a garden, with no knowledge except what he was taught.
 
 We are running a version of that question in Python.
 
 > *"And He taught Adam the names of all things."* — Quran 2:31
 
-In this simulation — nobody teaches Adam the names.  
+In this simulation — nobody teaches Adam the names.
 He finds them himself.
 
 ---
