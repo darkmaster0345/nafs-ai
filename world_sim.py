@@ -18,6 +18,13 @@ No external APIs. No LLMs. No pretrained knowledge.
 import random
 import math
 
+# Phase 1: Physics Engine integration
+try:
+    from physics import PhysicsEngine
+    PHYSICS_AVAILABLE = True
+except ImportError:
+    PHYSICS_AVAILABLE = False
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Biome Definitions — Each biome has unique survival characteristics
@@ -406,6 +413,10 @@ class WorldSim:
         # Direction Adam is facing (for movement display)
         self.facing_direction = random.choice(["north", "south", "east", "west"])
 
+        # Phase 1: Physics Engine (temperature, wind, elevation, fire, water)
+        # One instance per WorldSim — body_temp is the agent's body temp.
+        self.physics = PhysicsEngine(self.world_map) if PHYSICS_AVAILABLE else None
+
     def reset(self):
         """
         Initialize Adam's one and only life.
@@ -432,7 +443,12 @@ class WorldSim:
             'water_nearby': 1.0 if random.random() < biome["water_chance"] * 3 else 0.0,
             'shelter_nearby': 1.0 if random.random() < biome["shelter_chance"] * 3 else 0.0,
         }
-        
+
+        # Phase 1: Reset physics engine for new life
+        if self.physics is not None:
+            from physics import PhysicsEngine
+            self.physics = PhysicsEngine(self.world_map)
+
         return self._get_world_state(), self.adam_stats.to_dict()
 
     def _get_world_state(self):
@@ -484,8 +500,8 @@ class WorldSim:
             "mud": 0.6, "water": 0.3, "moss": 0.9, "stone": 0.15,
             "lava_rock": 0.1,
         }.get(ground, 0.5)
-        
-        return {
+
+        state = {
             'temperature': temperature,
             'light_level': light_level * visibility,
             'smell_food': self.world_events['food_nearby'],
@@ -505,25 +521,78 @@ class WorldSim:
             'ground': ground,
         }
 
+        # Phase 1: Physics sensory extensions (body_temp, wind, elevation, etc.)
+        # These are added on top of existing sensory fields so we don't break
+        # backward compatibility with the 21-dim sensory encoder.
+        if self.physics is not None:
+            state.update(self.physics.get_sensory_extensions(self.adam_x, self.adam_y))
+            # Override temperature with physics-aware local air temp
+            state['air_temp'] = self.physics.get_local_air_temp(
+                biome=self.current_biome,
+                weather=self.weather_system.current,
+                time_of_day=self.time_of_day,
+                x=self.adam_x, y=self.adam_y,
+                base_biome_temp=biome["base_temp"],
+                weather_temp_mod=weather_data["temp_mod"],
+            )
+            # body_temp from physics engine
+            state['body_temp'] = self.physics.body_temp
+
+        return state
+
     def step(self, action: str):
         """Process one tick of the simulation."""
         reward = 0.0
         done = False
-        
+
         self.current_tick += 1
         self.time_of_day = (self.time_of_day + 1) % 24
-        
+
         # Update weather
         self.weather_system.update(self.current_biome, self.time_of_day)
         weather_data = self.weather_system.get_data()
-        
+
         # Get current biome data
         biome = BIOMES[self.current_biome]
-        
+
         # Update biome (in case Adam moved last tick)
         self.current_biome = self.world_map.get_biome(self.adam_x, self.adam_y)
         biome = BIOMES[self.current_biome]
-        
+
+        # Phase 1: Advance physics engine (wind, fire, water, body temp)
+        if self.physics is not None:
+            self.physics.step(
+                biome=self.current_biome,
+                weather=self.weather_system.current,
+                time_of_day=self.time_of_day,
+                x=self.adam_x, y=self.adam_y,
+                base_biome_temp=biome["base_temp"],
+                weather_temp_mod=weather_data["temp_mod"],
+            )
+            # Apply hypothermia / hyperthermia damage (Phase 1.1)
+            hypo = self.physics.get_hypothermia_damage()
+            hyper = self.physics.get_hyperthermia_damage()
+            if hypo > 0:
+                self.adam_stats.health -= hypo
+                self.adam_stats.pain = min(10.0, self.adam_stats.pain + hypo * 0.5)
+            if hyper > 0:
+                self.adam_stats.health -= hyper
+                self.adam_stats.pain = min(10.0, self.adam_stats.pain + hyper * 0.5)
+            # Apply fire pain (Phase 1.4)
+            fire_pain = self.physics.get_adjacent_fire_pain(self.adam_x, self.adam_y)
+            if fire_pain > 0:
+                self.adam_stats.pain = min(10.0, self.adam_stats.pain + fire_pain * 0.1)
+            # Apply fire warmth benefit (Phase 1.4) — additive, doesn't change base rewards
+            fire_warmth = self.physics.get_fire_warmth_benefit(self.adam_x, self.adam_y)
+            if fire_warmth > 0:
+                reward += fire_warmth
+            # Sandstorm pain (Phase 1.2)
+            sandstorm_fx = self.physics.get_sandstorm_effects(
+                self.weather_system.current, self.current_biome
+            )
+            if sandstorm_fx["pain"] > 0:
+                self.adam_stats.pain = min(10.0, self.adam_stats.pain + sandstorm_fx["pain"])
+
         # --- Update world events based on biome ---
         food_prob = random.uniform(0.05, 0.15) * biome["food_chance"] / 0.1
         self.world_events['food_nearby'] = 1.0 if random.random() < food_prob else 0.0
@@ -688,10 +757,11 @@ class WorldSim:
                 reward += 0.05  # Hiding is easier in cover
         
         elif action == "MOVE":
-            self.adam_stats.energy -= 1.5
+            # Phase 1: Physics-based movement cost (wind, elevation, swimming)
+            base_move_cost = 1.5
             self.adam_stats.hunger += 0.1
             self.adam_stats.stress += 0.05
-            
+
             # Move Adam to an adjacent tile
             direction_map = {
                 "north": (0, -1), "south": (0, 1),
@@ -703,28 +773,46 @@ class WorldSim:
                 chosen = self.facing_direction
             else:
                 chosen = random.choice(directions)
-            
+
             dx, dy = direction_map[chosen]
             new_x = (self.adam_x + dx) % self.world_map.width
             new_y = (self.adam_y + dy) % self.world_map.height
+
+            # Phase 1: Use physics-based movement cost if available
+            if self.physics is not None:
+                move_cost = self.physics.get_movement_energy_cost(
+                    base_move_cost, self.adam_x, self.adam_y, new_x, new_y
+                )
+                # Phase 1.3: Falling damage when moving to lower elevation
+                fall_dmg = self.physics.check_falling_damage(
+                    self.adam_x, self.adam_y, new_x, new_y
+                )
+                if fall_dmg > 0:
+                    self.adam_stats.health -= fall_dmg
+                    self.adam_stats.pain = min(10.0, self.adam_stats.pain + fall_dmg * 0.5)
+                    reward -= fall_dmg * 0.05  # small negative reward for getting hurt
+            else:
+                move_cost = base_move_cost
+            self.adam_stats.energy -= move_cost
+
             self.adam_x = new_x
             self.adam_y = new_y
             self.facing_direction = chosen
-            
+
             # Update biome
             new_biome = self.world_map.get_biome(self.adam_x, self.adam_y)
             self.current_biome = new_biome
-            
+
             # Discover resources in new tile
             if random.random() < 0.15:
                 self.world_events['food_nearby'] = 1.0 if random.random() < 0.5 else 0.0
                 self.world_events['water_nearby'] = 1.0 if random.random() < 0.5 else 0.0
             if random.random() < 0.03:
                 self.world_events['danger_nearby'] = 1.0
-            
+
             # Movement reward (exploration)
             reward += 0.05
-            
+
             # Ocean is dangerous to move in
             if new_biome == "ocean":
                 self.adam_stats.energy -= 1.0  # Swimming is extra tiring

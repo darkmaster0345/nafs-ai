@@ -1032,3 +1032,240 @@ class TestVocabWordLog:
         assert "Adam's Vocabulary" in html
         assert "Eve's Vocabulary" in html
         assert "Convergence" in html
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 1 — Physics Engine (temperature, wind, elevation, fire, water)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestPhysicsEngine:
+    """Tests for the Phase 1 physics module."""
+
+    def _make_physics(self, biome="plains"):
+        from physics import PhysicsEngine
+        class MockWorldMap:
+            def __init__(self):
+                self.width = 64
+                self.height = 64
+            def get_biome(self, x, y):
+                return biome
+        return PhysicsEngine(MockWorldMap(), seed=42)
+
+    def test_body_temp_starts_at_37(self):
+        p = self._make_physics()
+        assert p.body_temp == 37.0
+
+    def test_body_temp_converges_to_air_temp(self):
+        """Over many ticks, body temp should approach air temp (gradual)."""
+        p = self._make_physics(biome="desert")
+        initial = p.body_temp
+        for _ in range(200):
+            p.step("desert", "clear", 12, 10, 10, 38.0, 0.0)
+        # Should have moved significantly toward 38°C (but not instantly)
+        assert abs(p.body_temp - 38.0) < abs(initial - 38.0)
+        assert 32 < p.body_temp < 42
+
+    def test_hypothermia_below_30(self):
+        p = self._make_physics()
+        p.body_temp = 28.0
+        dmg = p.get_hypothermia_damage()
+        assert dmg > 0
+        # 30 - 28 = 2, * 0.1 = 0.2
+        assert abs(dmg - 0.2) < 1e-3
+
+    def test_hypothermia_zero_above_30(self):
+        p = self._make_physics()
+        p.body_temp = 35.0
+        assert p.get_hypothermia_damage() == 0.0
+
+    def test_hyperthermia_above_42(self):
+        p = self._make_physics()
+        p.body_temp = 44.0
+        dmg = p.get_hyperthermia_damage()
+        assert dmg > 0
+        # 44 - 42 = 2, * 0.1 = 0.2
+        assert abs(dmg - 0.2) < 1e-3
+
+    def test_hyperthermia_zero_below_42(self):
+        p = self._make_physics()
+        p.body_temp = 35.0
+        assert p.get_hyperthermia_damage() == 0.0
+
+    def test_cave_stable_12c(self):
+        """Caves should always be 12°C regardless of weather."""
+        p = self._make_physics(biome="cave")
+        temp = p.get_local_air_temp("cave", "storm", 0, 5, 5, 5.0, -10.0)
+        assert temp == 12.0
+
+    def test_desert_night_drops_to_5c(self):
+        """Desert at night should be ~5°C."""
+        p = self._make_physics(biome="desert")
+        temp = p.get_local_air_temp("desert", "clear", 2, 5, 5, 38.0, 0.0)
+        assert temp <= 6.0
+
+    def test_elevation_makes_colder(self):
+        """High elevation should be colder (-2°C per unit above 5)."""
+        p = self._make_physics(biome="mountain")
+        # Force a high elevation
+        p.elevation_map[5][5] = 9
+        temp = p.get_local_air_temp("mountain", "clear", 12, 5, 5, 5.0, 0.0)
+        # 5 - (9-5)*2 = 5 - 8 = -3
+        assert abs(temp - (-3.0)) < 1e-3
+
+    def test_fire_ignition_on_fuel_biome(self):
+        p = self._make_physics(biome="forest")
+        assert p.ignite_fire(5, 5) is True
+
+    def test_fire_no_ignition_on_non_fuel(self):
+        p = self._make_physics(biome="desert")
+        assert p.ignite_fire(5, 5) is False
+
+    def test_fire_pain_when_adjacent(self):
+        p = self._make_physics(biome="forest")
+        p.ignite_fire(6, 5)  # adjacent to (5,5)
+        pain = p.get_adjacent_fire_pain(5, 5)
+        assert pain > 0
+        assert pain <= 10.0
+
+    def test_fire_warmth_benefit_when_cold(self):
+        """If body temp < 35 and adjacent to fire, return positive reward."""
+        p = self._make_physics(biome="forest")
+        p.body_temp = 30.0
+        p.ignite_fire(6, 5)
+        benefit = p.get_fire_warmth_benefit(5, 5)
+        assert benefit > 0
+
+    def test_fire_warmth_no_benefit_when_warm(self):
+        """If body temp >= 35, no warmth benefit even with adjacent fire."""
+        p = self._make_physics(biome="forest")
+        p.body_temp = 38.0
+        p.ignite_fire(6, 5)
+        benefit = p.get_fire_warmth_benefit(5, 5)
+        assert benefit == 0.0
+
+    def test_fire_dies_in_rain(self):
+        p = self._make_physics(biome="forest")
+        p.ignite_fire(5, 5)
+        assert p.is_fire_tile(5, 5)
+        p._update_fire("rain", 5, 5)
+        assert not p.is_fire_tile(5, 5)
+
+    def test_wind_with_movement_costs_less(self):
+        """Moving with the wind should cost less energy."""
+        p = self._make_physics()
+        p.wind_speed = 5
+        p.wind_dir = "N"
+        # Moving N with N wind
+        mult = p.get_wind_modifier_for_movement(0, -1)
+        assert mult == 0.85
+
+    def test_wind_against_movement_costs_more(self):
+        """Moving against the wind should cost more energy."""
+        p = self._make_physics()
+        p.wind_speed = 5
+        p.wind_dir = "N"
+        # Moving S against N wind
+        mult = p.get_wind_modifier_for_movement(0, 1)
+        assert mult == 1.30
+
+    def test_falling_damage_3plus_elevation(self):
+        """Falling 3+ elevation units should cause damage."""
+        p = self._make_physics()
+        p.elevation_map[5][5] = 8
+        p.elevation_map[6][5] = 4  # 4-tile drop
+        dmg = p.check_falling_damage(5, 5, 5, 6)
+        assert dmg > 0
+        # (4 - 2) * 5 = 10
+        assert abs(dmg - 10.0) < 1e-3
+
+    def test_no_falling_damage_small_drop(self):
+        """Small elevation drops should not cause damage."""
+        p = self._make_physics()
+        p.elevation_map[5][5] = 5
+        p.elevation_map[6][5] = 3  # 2-tile drop (< 3 threshold)
+        dmg = p.check_falling_damage(5, 5, 5, 6)
+        assert dmg == 0.0
+
+    def test_rain_creates_temporary_water(self):
+        """Rain should fill some low-elevation tiles with water."""
+        p = self._make_physics()
+        # Force low elevations around agent
+        for x in range(10):
+            for y in range(10):
+                p.elevation_map[y][x] = 1
+        for _ in range(10):  # Multiple rain ticks
+            p._update_water("rain", 5, 5)
+        assert len(p.water_tiles) > 0
+
+    def test_drought_dries_up_water(self):
+        """After 2000 ticks without rain, water tiles should dry up."""
+        p = self._make_physics()
+        # Add water tiles
+        for i in range(20):
+            p.water_tiles.add((i, i))
+        # Simulate 2500 ticks without rain
+        p.current_tick = 2500
+        p.last_rain_tick = 0
+        # Multiple drought update ticks
+        for _ in range(50):
+            p._update_water("clear", 5, 5)
+        assert len(p.water_tiles) < 20  # Some should have dried up
+
+    def test_ocean_tile_is_undrinkable(self):
+        """Ocean tiles should be marked as undrinkable."""
+        from physics import PhysicsEngine
+        class OceanWorldMap:
+            def __init__(self):
+                self.width = 64
+                self.height = 64
+            def get_biome(self, x, y):
+                return "ocean"
+        p = PhysicsEngine(OceanWorldMap(), seed=42)
+        assert p.is_ocean_tile(5, 5) is True
+        assert p.is_water_tile(5, 5) is False  # Ocean isn't temporary water
+
+    def test_sandstorm_causes_pain(self):
+        """Sandstorm should sometimes cause pain."""
+        p = self._make_physics(biome="desert")
+        # Force sandstorm pain probability
+        import physics as phys_module
+        orig_prob = phys_module.SANDSTORM_PAIN_PROB
+        phys_module.SANDSTORM_PAIN_PROB = 1.0  # Always cause pain
+        try:
+            fx = p.get_sandstorm_effects("sandstorm", "desert")
+            assert fx["pain"] > 0
+            assert fx["visibility_penalty"] > 0
+        finally:
+            phys_module.SANDSTORM_PAIN_PROB = orig_prob
+
+    def test_sensory_extensions_returned(self):
+        """get_sensory_extensions should return all required fields."""
+        p = self._make_physics()
+        ext = p.get_sensory_extensions(5, 5)
+        required = {"body_temp", "wind_speed", "wind_dir", "elevation",
+                    "surface_wetness", "is_on_fire", "adjacent_fire_count",
+                    "is_drought"}
+        assert set(ext.keys()) == required
+
+    def test_world_sim_integrates_physics(self):
+        """WorldSim should instantiate PhysicsEngine and update body_temp."""
+        from world_sim import WorldSim
+        sim = WorldSim()
+        assert sim.physics is not None
+        state, _ = sim.reset()
+        # Physics sensory fields should be in world_state
+        assert "body_temp" in state
+        assert "wind_speed" in state
+        assert "elevation" in state
+
+    def test_world_sim_physics_step_advances_body_temp(self):
+        """Running many ticks should change body temp from initial 37."""
+        from world_sim import WorldSim
+        sim = WorldSim()
+        sim.reset()
+        # Force a cold biome to test body temp change
+        sim.current_biome = "tundra"
+        for _ in range(300):
+            sim.step("IDLE")
+        # Body temp should have moved away from initial 37
+        assert sim.physics.body_temp != 37.0
