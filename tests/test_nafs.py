@@ -3406,3 +3406,283 @@ class TestGodotFiles:
         assert "family_tree_panel" in content
         # Sidebar with agent stats
         assert "sidebar" in content
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 12 — Full Observability Layer (events, lineage DB, science dashboard)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestEventLogSystem:
+    """Tests for the Phase 12 event log system."""
+
+    def _make_log(self, tmp_path):
+        from events import EventLogSystem
+        return EventLogSystem(log_path=str(tmp_path / "events.jsonl"))
+
+    def test_record_event(self, tmp_path):
+        log = self._make_log(tmp_path)
+        event = log.record("BIRTH", tick=100, agent_id="baby_1")
+        assert event["event_type"] == "BIRTH"
+        assert event["tick"] == 100
+
+    def test_invalid_event_type_rejected(self, tmp_path):
+        log = self._make_log(tmp_path)
+        with pytest.raises(ValueError):
+            log.record("INVALID_TYPE", tick=100)
+
+    def test_query_all_events(self, tmp_path):
+        log = self._make_log(tmp_path)
+        log.record("BIRTH", tick=100)
+        log.record("DEATH", tick=200)
+        assert len(log.query()) == 2
+
+    def test_query_by_event_type(self, tmp_path):
+        log = self._make_log(tmp_path)
+        log.record("BIRTH", tick=100)
+        log.record("BIRTH", tick=200)
+        log.record("DEATH", tick=300)
+        births = log.query(event_type="BIRTH")
+        assert len(births) == 2
+
+    def test_query_by_tick_range(self, tmp_path):
+        log = self._make_log(tmp_path)
+        log.record("BIRTH", tick=50)
+        log.record("DEATH", tick=150)
+        log.record("FIRST_CONTACT", tick=250)
+        early = log.query(max_tick=200)
+        assert len(early) == 2  # BIRTH(50), DEATH(150)
+
+    def test_query_by_agent_id(self, tmp_path):
+        log = self._make_log(tmp_path)
+        log.record("BIRTH", tick=100, agent_id="adam")
+        log.record("BIRTH", tick=200, agent_id="eve")
+        adams = log.query(agent_id="adam")
+        assert len(adams) == 1
+
+    def test_query_by_generation(self, tmp_path):
+        log = self._make_log(tmp_path)
+        log.record("BIRTH", tick=100, generation=1)
+        log.record("BIRTH", tick=200, generation=2)
+        gen2 = log.query(generation=2)
+        assert len(gen2) == 1
+
+    def test_first_event_of_type(self, tmp_path):
+        log = self._make_log(tmp_path)
+        log.record("BIRTH", tick=100)
+        log.record("BIRTH", tick=200)
+        first = log.get_first_event_of_type("BIRTH")
+        assert first["tick"] == 100
+
+    def test_first_event_of_type_returns_none(self, tmp_path):
+        log = self._make_log(tmp_path)
+        assert log.get_first_event_of_type("EXTINCTION") is None
+
+    def test_event_count(self, tmp_path):
+        log = self._make_log(tmp_path)
+        log.record("BIRTH", tick=100)
+        log.record("DEATH", tick=200)
+        log.record("BIRTH", tick=300)
+        assert log.get_event_count() == 3
+        assert log.get_event_count("BIRTH") == 2
+
+    def test_get_event_types(self, tmp_path):
+        log = self._make_log(tmp_path)
+        log.record("BIRTH", tick=100)
+        log.record("DEATH", tick=200)
+        types = log.get_event_types()
+        assert "BIRTH" in types
+        assert "DEATH" in types
+
+    def test_get_timeline_sorted(self, tmp_path):
+        log = self._make_log(tmp_path)
+        log.record("BIRTH", tick=300)
+        log.record("DEATH", tick=100)
+        log.record("FIRST_CONTACT", tick=200)
+        timeline = log.get_timeline()
+        ticks = [e["tick"] for e in timeline]
+        assert ticks == sorted(ticks)
+
+    def test_summary(self, tmp_path):
+        log = self._make_log(tmp_path)
+        log.record("BIRTH", tick=100)
+        log.record("DEATH", tick=200)
+        summary = log.get_summary()
+        assert summary["total_events"] == 2
+        assert summary["first_tick"] == 100
+        assert summary["last_tick"] == 200
+        assert "BIRTH" in summary["by_type"]
+
+    def test_all_12_event_types_supported(self):
+        from events import EVENT_TYPES
+        expected = {"BIRTH", "DEATH", "FIRST_CONTACT", "FIRST_WORD",
+                    "COOKING_DISCOVERY", "FIRE_DISCOVERY", "FAMILY_FORMED",
+                    "EXTINCTION", "SPECIATION", "CULTURAL_TRANSFER",
+                    "TERRITORY_CLAIMED", "BRAIN_GROWTH"}
+        assert expected == EVENT_TYPES
+
+    def test_log_file_written(self, tmp_path):
+        from events import EventLogSystem
+        log_path = tmp_path / "events.jsonl"
+        log = EventLogSystem(log_path=str(log_path))
+        log.record("BIRTH", tick=100, agent_id="adam")
+        assert log_path.exists()
+        import json
+        with open(log_path) as f:
+            entry = json.loads(f.readline())
+        assert entry["event_type"] == "BIRTH"
+
+
+class TestLineageDatabase:
+    """Tests for the Phase 12 lineage database."""
+
+    def _make_db(self, tmp_path):
+        from events import LineageDatabase
+        return LineageDatabase(db_path=str(tmp_path / "lineage.db"))
+
+    def test_insert_agent(self, tmp_path):
+        db = self._make_db(tmp_path)
+        db.insert_agent("adam", [], 1, 0, biome="plains")
+        agent = db.get_agent("adam")
+        assert agent is not None
+        assert agent["generation"] == 1
+
+    def test_record_death(self, tmp_path):
+        db = self._make_db(tmp_path)
+        db.insert_agent("adam", [], 1, 0)
+        db.record_death("adam", death_tick=500, death_cause="starvation")
+        agent = db.get_agent("adam")
+        assert agent["death_tick"] == 500
+        assert agent["death_cause"] == "starvation"
+
+    def test_query_longest_lived(self, tmp_path):
+        db = self._make_db(tmp_path)
+        db.insert_agent("adam", [], 1, 0)
+        db.insert_agent("eve", [], 1, 0)
+        db.record_death("adam", 300, "starvation")
+        db.record_death("eve", 800, "old_age")
+        longest = db.query_longest_lived()
+        assert longest["agent_id"] == "eve"
+
+    def test_query_agents_by_generation(self, tmp_path):
+        db = self._make_db(tmp_path)
+        db.insert_agent("adam", [], 1, 0)
+        db.insert_agent("eve", [], 1, 0)
+        db.insert_agent("baby", ["adam", "eve"], 2, 100)
+        gen1 = db.query_agents_by_generation(1)
+        gen2 = db.query_agents_by_generation(2)
+        assert len(gen1) == 2
+        assert len(gen2) == 1
+
+    def test_query_offspring(self, tmp_path):
+        db = self._make_db(tmp_path)
+        db.insert_agent("adam", [], 1, 0)
+        db.insert_agent("eve", [], 1, 0)
+        db.insert_agent("baby", ["adam", "eve"], 2, 100)
+        offspring = db.query_offspring("adam")
+        assert len(offspring) == 1
+        assert offspring[0]["agent_id"] == "baby"
+
+    def test_insert_vocabulary(self, tmp_path):
+        db = self._make_db(tmp_path)
+        db.insert_vocabulary("adam", "cold pain", "extreme cold hurts", 100, 1)
+        vocab = db.get_agent_vocabulary("adam")
+        assert len(vocab) == 1
+        assert vocab[0]["word"] == "cold pain"
+
+    def test_get_word_origin(self, tmp_path):
+        db = self._make_db(tmp_path)
+        db.insert_vocabulary("adam", "cold pain", "cold", 100, 1)
+        db.insert_vocabulary("eve", "cold pain", "cold", 110, 1)
+        origin = db.get_word_origin("cold pain")
+        assert origin["agent_id"] == "adam"  # first discovered
+
+    def test_insert_relationship(self, tmp_path):
+        db = self._make_db(tmp_path)
+        db.insert_relationship("adam", "eve", "MATE", 0.8, 0.9, 200)
+        rels = db.get_relationships("adam")
+        assert len(rels) >= 1
+
+    def test_insert_event(self, tmp_path):
+        db = self._make_db(tmp_path)
+        db.insert_event("BIRTH", tick=100, agent_id="baby")
+        db.insert_event("DEATH", tick=200, agent_id="adam")
+        events = db.query_events()
+        assert len(events) == 2
+
+    def test_query_events_filtered(self, tmp_path):
+        db = self._make_db(tmp_path)
+        db.insert_event("BIRTH", tick=100)
+        db.insert_event("DEATH", tick=200)
+        db.insert_event("BIRTH", tick=300)
+        births = db.query_events(event_type="BIRTH")
+        assert len(births) == 2
+
+    def test_export_family_tree(self, tmp_path):
+        db = self._make_db(tmp_path)
+        db.insert_agent("adam", [], 1, 0)
+        db.insert_agent("eve", [], 1, 0)
+        db.insert_agent("baby", ["adam", "eve"], 2, 100)
+        db.insert_agent("grandchild", ["baby", "other"], 3, 200)
+        tree = db.export_family_tree("adam")
+        assert tree["agent_id"] == "adam"
+        assert len(tree["children"]) == 1
+        assert tree["children"][0]["agent_id"] == "baby"
+        assert len(tree["children"][0]["children"]) == 1
+
+    def test_export_all_agents_json(self, tmp_path):
+        db = self._make_db(tmp_path)
+        db.insert_agent("adam", [], 1, 0)
+        db.insert_agent("eve", [], 1, 0)
+        json_str = db.export_all_agents_json()
+        import json
+        agents = json.loads(json_str)
+        assert len(agents) == 2
+
+    def test_summary(self, tmp_path):
+        db = self._make_db(tmp_path)
+        db.insert_agent("adam", [], 1, 0)
+        db.insert_agent("eve", [], 1, 0)
+        db.insert_agent("baby", ["adam", "eve"], 2, 100)
+        db.record_death("adam", 500)
+        db.insert_vocabulary("adam", "test", "test", 100, 1)
+        summary = db.get_summary()
+        assert summary["total_agents"] == 3
+        assert summary["living_agents"] == 2
+        assert summary["max_generation"] == 2
+        assert summary["total_words"] == 1
+
+
+class TestScienceDashboard:
+    """Tests for the Phase 12 science dashboard."""
+
+    def test_generate_dashboard(self, tmp_path):
+        from events import ScienceDashboard
+        dashboard = ScienceDashboard(output_path=str(tmp_path / "dashboard.html"))
+        path = dashboard.generate(
+            population_history=[(0, 2), (100, 3), (200, 4)],
+            trait_evolution={1: {"metabolism": 1.0}, 2: {"metabolism": 1.1}},
+            vocab_history=[(0, 5), (100, 10)],
+            brain_sizes=[777, 4353],
+            extinction_ticks=[5000],
+        )
+        import os
+        assert os.path.exists(path)
+        # Verify HTML content
+        with open(path) as f:
+            content = f.read()
+        assert "Population Over Time" in content
+        assert "Trait Evolution" in content
+        assert "Vocabulary Size" in content
+        assert "Brain Size" in content
+        assert "Extinction" in content
+
+    def test_dashboard_handles_empty_data(self, tmp_path):
+        from events import ScienceDashboard
+        dashboard = ScienceDashboard(output_path=str(tmp_path / "empty.html"))
+        path = dashboard.generate(
+            population_history=[],
+            trait_evolution={},
+            vocab_history=[],
+        )
+        import os
+        assert os.path.exists(path)

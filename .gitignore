@@ -22,6 +22,8 @@ first_contact.jsonl
 culture_events.jsonl
 vocab_extinctions.jsonl
 evolution_events.jsonl
+events.jsonl
+lineage.db
 observation_results.json
 run*.log
 server.log
