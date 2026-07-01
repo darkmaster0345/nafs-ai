@@ -3209,3 +3209,200 @@ class TestEvolutionTracker:
         y_neg = [10, 8, 6, 4, 2]
         corr_neg = tracker._pearson_correlation(x, y_neg)
         assert abs(corr_neg - (-1.0)) < 0.001
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 11 — Godot 2D Visual World (Python bridge + Godot scripts)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestGodotBridge:
+    """Tests for the Phase 11 Godot bridge (Python side)."""
+
+    def _make_bridge(self):
+        from godot_bridge import GodotBridge
+        return GodotBridge()
+
+    def test_milestone_fires_first_time(self):
+        bridge = self._make_bridge()
+        fired = bridge.fire_milestone("FIRST_CONTACT", {"tick": 100})
+        assert fired
+
+    def test_milestone_deduplicated(self):
+        bridge = self._make_bridge()
+        bridge.fire_milestone("FIRST_BIRTH", {"tick": 100})
+        fired = bridge.fire_milestone("FIRST_BIRTH", {"tick": 200})
+        assert not fired
+
+    def test_invalid_milestone_type(self):
+        bridge = self._make_bridge()
+        fired = bridge.fire_milestone("INVALID_TYPE")
+        assert not fired
+
+    def test_build_state_basic(self):
+        bridge = self._make_bridge()
+        state = bridge.build_state(tick=100, agent_positions={"adam": (5, 5)})
+        assert state["tick"] == 100
+        assert len(state["agents"]) == 1
+        assert state["agents"][0]["x"] == 5
+
+    def test_build_state_with_agent_data(self):
+        bridge = self._make_bridge()
+        agent_data = [
+            {"id": "adam", "type": "adam", "action": "MOVE",
+             "life_stage": "adult", "health": 90, "vocabulary_size": 25},
+        ]
+        state = bridge.build_state(tick=200,
+                                     agent_positions={"adam": (5, 5)},
+                                     agent_data=agent_data)
+        assert state["agents"][0]["action"] == "MOVE"
+        assert state["agents"][0]["health"] == 90
+
+    def test_milestones_included_in_state(self):
+        bridge = self._make_bridge()
+        bridge.fire_milestone("FIRST_CONTACT", {"tick": 100})
+        state = bridge.build_state(tick=100, agent_positions={})
+        assert len(state["milestones"]) == 1
+        assert state["milestones"][0]["type"] == "FIRST_CONTACT"
+
+    def test_milestones_drained_after_build(self):
+        bridge = self._make_bridge()
+        bridge.fire_milestone("FIRST_BIRTH", {"tick": 100})
+        bridge.build_state(tick=100, agent_positions={})
+        # Second build should have no pending milestones
+        state = bridge.build_state(tick=200, agent_positions={})
+        assert len(state["milestones"]) == 0
+
+    def test_history_stored(self):
+        bridge = self._make_bridge()
+        for tick in range(10):
+            bridge.build_state(tick=tick, agent_positions={})
+        assert bridge.get_history_length() == 10
+
+    def test_history_max_1000(self):
+        bridge = self._make_bridge()
+        for tick in range(1100):
+            bridge.build_state(tick=tick, agent_positions={})
+        # Should be capped at 1000
+        assert bridge.get_history_length() == 1000
+
+    def test_get_history_at_index(self):
+        bridge = self._make_bridge()
+        for tick in range(5):
+            bridge.build_state(tick=tick, agent_positions={})
+        state = bridge.get_history_at(2)
+        assert state["tick"] == 2
+
+    def test_get_history_at_invalid_index(self):
+        bridge = self._make_bridge()
+        bridge.build_state(tick=0, agent_positions={})
+        assert bridge.get_history_at(5) is None
+        assert bridge.get_history_at(-1) is None
+
+    def test_state_to_json(self):
+        bridge = self._make_bridge()
+        state = bridge.build_state(tick=100, agent_positions={})
+        json_str = bridge.state_to_json(state)
+        assert isinstance(json_str, str)
+        assert "\"tick\": 100" in json_str
+
+    def test_summary(self):
+        bridge = self._make_bridge()
+        bridge.fire_milestone("FIRST_CONTACT")
+        summary = bridge.get_summary()
+        assert "FIRST_CONTACT" in summary["milestones_fired"]
+        assert summary["history_length"] == 0
+
+    def test_all_milestone_types_supported(self):
+        """All 7 milestone types from MD Phase 11.4 should be supported."""
+        from godot_bridge import GodotBridge
+        expected = {"FIRST_CONTACT", "FIRST_BIRTH", "FIRST_DEATH", "FIRST_WORD",
+                    "NEW_GENERATION", "EXTINCTION", "COOKING_DISCOVERY"}
+        assert expected == GodotBridge.MILESTONE_TYPES
+
+    def test_check_milestones_with_no_engines(self):
+        """check_milestones should not crash with no engines attached."""
+        bridge = self._make_bridge()
+        bridge.check_milestones(tick=100, agent_data=[], agent_positions={})
+
+    def test_build_state_includes_all_required_keys(self):
+        """State should have all keys Godot expects."""
+        bridge = self._make_bridge()
+        state = bridge.build_state(tick=100, agent_positions={})
+        required = {"tick", "biome_map", "agents", "fire_tiles", "water_tiles",
+                    "time_of_day", "weather", "milestones", "population", "summary"}
+        assert set(state.keys()) == required
+
+
+class TestGodotFiles:
+    """Verify the Godot script files exist and have valid syntax markers."""
+
+    def test_godot_directory_exists(self):
+        import os
+        assert os.path.isdir("/home/z/my-project/nafs-ai/godot")
+
+    def test_world_renderer_exists(self):
+        import os
+        assert os.path.isfile("/home/z/my-project/nafs-ai/godot/WorldRenderer.gd")
+
+    def test_agent_renderer_exists(self):
+        import os
+        assert os.path.isfile("/home/z/my-project/nafs-ai/godot/AgentRenderer.gd")
+
+    def test_milestone_banner_exists(self):
+        import os
+        assert os.path.isfile("/home/z/my-project/nafs-ai/godot/MilestoneBanner.gd")
+
+    def test_observer_controls_exists(self):
+        import os
+        assert os.path.isfile("/home/z/my-project/nafs-ai/godot/ObserverControls.gd")
+
+    def test_network_controller_exists(self):
+        import os
+        assert os.path.isfile("/home/z/my-project/nafs-ai/godot/NetworkController.gd")
+
+    def test_project_godot_exists(self):
+        import os
+        assert os.path.isfile("/home/z/my-project/nafs-ai/godot/project.godot")
+
+    def test_world_renderer_has_biome_colors(self):
+        """WorldRenderer should define biome colors for all 10 biomes."""
+        with open("/home/z/my-project/nafs-ai/godot/WorldRenderer.gd") as f:
+            content = f.read()
+        biomes = ["desert", "forest", "tundra", "plains", "mountain",
+                  "swamp", "ocean", "jungle", "cave", "volcano"]
+        for biome in biomes:
+            assert biome in content, f"Missing biome: {biome}"
+
+    def test_agent_renderer_has_phase_11_features(self):
+        """AgentRenderer should support thought bubbles, action labels, family lines."""
+        with open("/home/z/my-project/nafs-ai/godot/AgentRenderer.gd") as f:
+            content = f.read()
+        assert "action_label" in content
+        assert "thought_label" in content
+        assert "_update_family_lines" in content
+
+    def test_milestone_banner_has_all_event_types(self):
+        """MilestoneBanner should handle all 7 milestone types from MD Phase 11.4."""
+        with open("/home/z/my-project/nafs-ai/godot/MilestoneBanner.gd") as f:
+            content = f.read()
+        milestones = ["FIRST_CONTACT", "FIRST_BIRTH", "FIRST_DEATH", "FIRST_WORD",
+                      "NEW_GENERATION", "EXTINCTION", "COOKING_DISCOVERY"]
+        for m in milestones:
+            assert m in content, f"Missing milestone: {m}"
+
+    def test_observer_controls_has_phase_11_features(self):
+        """ObserverControls should have all features from MD Phase 11.3."""
+        with open("/home/z/my-project/nafs-ai/godot/ObserverControls.gd") as f:
+            content = f.read()
+        # Time controls (pause, 1x, 5x, 20x)
+        assert "_set_speed" in content
+        # Follow mode
+        assert "follow_mode" in content
+        # History scrubbing
+        assert "history_ticks" in content
+        # Vocabulary panel
+        assert "vocab_panel" in content
+        # Family tree view
+        assert "family_tree_panel" in content
+        # Sidebar with agent stats
+        assert "sidebar" in content
