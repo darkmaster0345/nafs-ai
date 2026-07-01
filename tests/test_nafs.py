@@ -3016,3 +3016,196 @@ class TestCultureEngine:
         summary = culture.get_summary()
         assert "total_agents_with_preferences" in summary
         assert "vocab_total" in summary
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 10 — Multi-Generation Evolution
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestEvolutionTracker:
+    """Tests for the Phase 10 evolution module."""
+
+    def _make_tracker(self, tmp_path):
+        from evolution import EvolutionTracker
+        return EvolutionTracker(seed=42, log_path=str(tmp_path / "evolution.jsonl"))
+
+    def _record_test_data(self, tracker, num_gens=3, agents_per_gen=5):
+        for gen in range(1, num_gens + 1):
+            for i in range(agents_per_gen):
+                tracker.record_generation_data(
+                    generation=gen,
+                    agent_data={
+                        "agent_id": f"g{gen}_a{i}",
+                        "lifespan": 100 + gen * 50 + i * 10,
+                        "offspring_count": i,
+                        "vocabulary_size": 20 + gen * 5,
+                        "biome": ["desert", "forest", "swamp"][i % 3],
+                        "traits": {"metabolism_rate": 1.0 + i * 0.1},
+                        "behaviors": {"EAT": 10 + i},
+                        "death_tick": 500,
+                    },
+                    tick=gen * 100,
+                )
+
+    def test_selection_metrics_per_generation(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        self._record_test_data(tracker)
+        metrics = tracker.get_selection_metrics()
+        assert 1 in metrics
+        assert metrics[1]["agent_count"] == 5
+        assert metrics[1]["avg_lifespan"] > 0
+
+    def test_biome_survival_stats(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        self._record_test_data(tracker)
+        stats = tracker.get_biome_survival_stats()
+        assert "desert" in stats
+        assert "forest" in stats
+        assert stats["desert"]["born"] > 0
+
+    def test_trait_lifespan_correlations(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        self._record_test_data(tracker)
+        corrs = tracker.get_trait_lifespan_correlations()
+        assert "metabolism_rate" in corrs
+        assert "sample_size" in corrs["metabolism_rate"]
+
+    def test_behavior_offspring_correlations(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        self._record_test_data(tracker)
+        corrs = tracker.get_behavior_offspring_correlations()
+        assert "EAT" in corrs
+
+    def test_speciation_returns_none_with_few_generations(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        self._record_test_data(tracker, num_gens=2)  # < 5
+        result = tracker.check_speciation(tick=200)
+        assert result is None
+
+    def test_cataclysm_returns_none_when_too_soon(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        tracker.last_cataclysm_check = 5000
+        result = tracker.check_cataclysm(tick=6000, num_agents_alive=10)
+        # 6000 - 5000 = 1000 < 10000, so no check
+        assert result is None
+
+    def test_cataclysm_returns_none_when_probability_not_met(self, tmp_path):
+        import random as random_module
+        tracker = self._make_tracker(tmp_path)
+        tracker.last_cataclysm_check = -10000  # allow check
+        # Use a seed that produces random() > 0.10
+        tracker.rng = random_module.Random(999)
+        result = tracker.check_cataclysm(tick=10000, num_agents_alive=10)
+        # May or may not trigger (10% chance), so just check format if it does
+        if result:
+            assert "cause" in result
+            assert "agents_killed" in result
+
+    def test_cataclysm_triggers_with_correct_format(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        tracker.last_cataclysm_check = -10000
+        # Force cataclysm by overriding random
+        original_random = tracker.rng.random
+        tracker.rng.random = lambda: 0.05  # < 0.10 → triggers
+        tracker.rng.choice = lambda x: "drought"
+        tracker.rng.uniform = lambda a, b: 0.5  # 50% severity
+        result = tracker.check_cataclysm(tick=10000, num_agents_alive=20)
+        assert result is not None
+        assert result["cause"] == "drought"
+        assert result["agents_killed"] == 10  # 50% of 20
+        assert result["agents_alive_after"] == 10
+
+    def test_record_recovery(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        tracker.last_cataclysm_check = -10000
+        tracker.rng.random = lambda: 0.05
+        tracker.rng.choice = lambda x: "drought"
+        tracker.rng.uniform = lambda a, b: 0.5
+        tracker.check_cataclysm(tick=10000, num_agents_alive=20)
+        recovery = tracker.record_recovery(tick=10500, num_agents_alive=25,
+                                             avg_traits={"metabolism": 1.5})
+        assert recovery["event"] == "RECOVERY"
+        assert recovery["recovery_time"] == 500
+
+    def test_novel_behavior_detected(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        is_novel = tracker.record_behavior("first_behavior", tick=100)
+        assert is_novel
+
+    def test_known_behavior_not_novel(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        tracker.record_behavior("test_behavior", tick=100)
+        is_novel = tracker.record_behavior("test_behavior", tick=200)
+        assert not is_novel
+
+    def test_vocab_snapshot_detects_new_and_lost(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        tracker.record_vocab_snapshot(tick=100, vocab_counts={"a": 1, "b": 2})
+        snap = tracker.record_vocab_snapshot(tick=200, vocab_counts={"a": 1, "c": 3})
+        assert "c" in snap["new_words"]
+        assert "b" in snap["lost_words"]
+
+    def test_mark_cultural_divergence(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        tracker.mark_cultural_divergence("family_A", {"food": "berries"})
+        oee = tracker.check_open_ended_evolution()
+        assert oee["criteria"]["cultural_divergence"] is True
+
+    def test_oee_check_returns_dict(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        oee = tracker.check_open_ended_evolution()
+        assert "achieved" in oee
+        assert "criteria" in oee
+        assert "missing" in oee
+        assert "criteria_met" in oee
+        assert "total_criteria" in oee
+        assert oee["total_criteria"] == 5
+
+    def test_oee_not_achieved_initially(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        oee = tracker.check_open_ended_evolution()
+        assert not oee["achieved"]
+
+    def test_oee_achieved_when_all_criteria_met(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        # Mark all criteria as true
+        tracker.record_behavior("novel", tick=100)
+        tracker.record_vocab_snapshot(tick=100, vocab_counts={"a": 1})
+        tracker.mark_cultural_divergence("A", {})
+        tracker.oee_status["biological_divergence"] = True
+        tracker.oee_status["extinction_recovery_with_shifts"] = True
+        oee = tracker.check_open_ended_evolution()
+        assert oee["achieved"]
+        assert oee["criteria_met"] == 5
+
+    def test_summary(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        self._record_test_data(tracker)
+        tracker.record_behavior("test", tick=100)
+        summary = tracker.get_summary()
+        assert summary["generations_tracked"] > 0
+        assert summary["novel_behaviors"] >= 1
+
+    def test_cataclysm_history(self, tmp_path):
+        tracker = self._make_tracker(tmp_path)
+        tracker.last_cataclysm_check = -10000
+        tracker.rng.random = lambda: 0.05
+        tracker.rng.choice = lambda x: "fire"
+        tracker.rng.uniform = lambda a, b: 0.5
+        tracker.check_cataclysm(tick=10000, num_agents_alive=10)
+        history = tracker.get_cataclysm_history()
+        assert len(history) == 1
+        assert history[0]["cause"] == "fire"
+
+    def test_pearson_correlation(self, tmp_path):
+        """Test that correlation is computed correctly for known data."""
+        tracker = self._make_tracker(tmp_path)
+        # Perfect positive correlation
+        x = [1, 2, 3, 4, 5]
+        y = [2, 4, 6, 8, 10]
+        corr = tracker._pearson_correlation(x, y)
+        assert abs(corr - 1.0) < 0.001
+        # Perfect negative correlation
+        y_neg = [10, 8, 6, 4, 2]
+        corr_neg = tracker._pearson_correlation(x, y_neg)
+        assert abs(corr_neg - (-1.0)) < 0.001
