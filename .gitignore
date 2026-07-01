@@ -12,6 +12,9 @@ checkpoints_*/
 # Training logs and artifacts
 training_log_run*.json
 life_log.json
+life_log_adam.json
+life_log_eve.json
+vocab_divergence.jsonl
 observation_results.json
 run*.log
 server.log

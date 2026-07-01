@@ -93,15 +93,41 @@ class EveAgent:
         device: str = 'cpu',
         learning_rate: float = None,
         name: str = "Eve",
+        input_dim: int = None,
+        first_contact: bool = False,
     ):
         self.name = name
         self.device = torch.device(device)
         self.world_sim = world_sim
 
+        # v1.0: First-contact mode uses 23-dim sensory input (21 base + 2 multi-agent)
+        # so Eve's PPO can observe Adam's last action.
+        self.first_contact = first_contact
+        if first_contact:
+            from sensory_encoder_multi import INPUT_DIM_MULTI, encode_sensory_input_multi
+            self._input_dim = INPUT_DIM_MULTI
+            self._encode_fn = lambda ws, st, **kw: encode_sensory_input_multi(
+                ws, st,
+                fear_signal=kw.get('fear_signal', 0.0),
+                pleasure_signal=kw.get('pleasure_signal', 0.0),
+                pattern_confidence=kw.get('pattern_confidence', 0.0),
+                other_presence=kw.get('other_presence', 0.0),
+                other_last_action_idx=kw.get('other_last_action_idx', -1),
+            )
+        else:
+            self._input_dim = input_dim or INPUT_DIM
+            # Wrap to ignore multi-agent kwargs (backward compat with 21-dim encoder)
+            self._encode_fn = lambda ws, st, **kw: encode_sensory_input(
+                ws, st,
+                fear_signal=kw.get('fear_signal', 0.0),
+                pleasure_signal=kw.get('pleasure_signal', 0.0),
+                pattern_confidence=kw.get('pattern_confidence', 0.0),
+            )
+
         # Eve's brain — completely separate from Adam's
         HIDDEN_DIM = PPO_CONFIG["hidden_dim"]
         NUM_ACTIONS = len(ACTION_NAMES)
-        self.model = BabyBrain(INPUT_DIM, HIDDEN_DIM, NUM_ACTIONS).to(self.device)
+        self.model = BabyBrain(self._input_dim, HIDDEN_DIM, NUM_ACTIONS).to(self.device)
         lr = learning_rate or PPO_CONFIG["learning_rate"]
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr, eps=1e-5)
 
@@ -109,7 +135,7 @@ class EveAgent:
         self.thought_engine = ThoughtEngine(memory_size=20)
         self.curiosity = CuriosityModule()
         self.dream_engine = DreamEngine()
-        self.learned_thinker = LearnedThinker(sensory_dim=INPUT_DIM, device=str(self.device))
+        self.learned_thinker = LearnedThinker(sensory_dim=self._input_dim, device=str(self.device))
         self.learned_thinker.start()
 
         # Eve's position and stats
@@ -189,11 +215,13 @@ class EveAgent:
         # Initial sensory input
         world_state = self.get_world_state()
         phase5 = self.thought_engine.get_phase5_signals(world_state, self.stats)
-        self.sensory_input = encode_sensory_input(
+        self.sensory_input = self._encode_fn(
             world_state, self.stats,
             fear_signal=phase5['fear_signal'],
             pleasure_signal=phase5['pleasure_signal'],
             pattern_confidence=phase5['pattern_confidence'],
+            other_presence=0.0,
+            other_last_action_idx=-1,
         ).to(self.device)
 
         self.alive = True
@@ -299,13 +327,16 @@ class EveAgent:
         action_name = ACTION_NAMES[action_idx.item()]
         return action_name, action_idx.item(), log_prob, value.squeeze()
 
-    def step(self, action: str, adam_x: int = None, adam_y: int = None) -> dict:
+    def step(self, action: str, adam_x: int = None, adam_y: int = None,
+             adam_last_action_idx: int = -1) -> dict:
         """
         Eve takes a step in the world.
 
         Args:
             action: The action to take
             adam_x, adam_y: Adam's position (for "other presence" sensing)
+            adam_last_action_idx: Adam's last action index (0-7) for v1.0 first-contact
+                                  mode. -1 = unknown/not seen.
 
         Returns:
             Result dict with reward, done, thought, emotion, etc.
@@ -419,11 +450,15 @@ class EveAgent:
         # Encode next observation
         next_world_state = self.get_world_state(adam_x, adam_y)
         next_phase5 = self.thought_engine.get_phase5_signals(next_world_state, self.stats)
-        self.sensory_input = encode_sensory_input(
+        # v1.0: pass other_presence and adam's last action for first-contact mode
+        other_presence = next_world_state.get('other_presence', 0.0)
+        self.sensory_input = self._encode_fn(
             next_world_state, self.stats,
             fear_signal=next_phase5['fear_signal'],
             pleasure_signal=next_phase5['pleasure_signal'],
             pattern_confidence=next_phase5['pattern_confidence'],
+            other_presence=other_presence,
+            other_last_action_idx=adam_last_action_idx,
         ).to(self.device)
 
         self.total_reward += reward

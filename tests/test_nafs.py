@@ -693,3 +693,215 @@ class TestEveAgent:
         world_state = eve.get_world_state(adam_x, adam_y)
         assert world_state['other_presence'] > 0
         assert world_state['other_direction'] != "none"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# v0.3 Tests — Learned Thinking, Vocab Divergence, Multi-Agent
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestLearnedThinking:
+    """Test the tiny transformer that learns to generate thoughts."""
+
+    def test_tokenizer_encode_decode(self):
+        """Tokenizer should round-trip simple strings."""
+        from learned_thinking import ThoughtTokenizer
+        text = "cold. dark."
+        encoded = ThoughtTokenizer.encode(text)
+        decoded = ThoughtTokenizer.decode(encoded)
+        assert decoded == "cold. dark.", f"Round-trip failed: '{decoded}'"
+
+    def test_tokenizer_vocab_size(self):
+        """Tokenizer should have ~31 tokens (29 chars + pad + eot)."""
+        from learned_thinking import ThoughtTokenizer
+        assert ThoughtTokenizer.VOCAB_SIZE == 31
+
+    def test_tokenizer_handles_unknown_chars(self):
+        """Unknown characters should map to space, not crash."""
+        from learned_thinking import ThoughtTokenizer
+        encoded = ThoughtTokenizer.encode("cold! @#$")
+        decoded = ThoughtTokenizer.decode(encoded)
+        # Special chars should be replaced with space
+        assert "!" not in decoded
+        assert "@" not in decoded
+
+    def test_transformer_parameter_count(self):
+        """Transformer should be tiny (< 1M params)."""
+        from learned_thinking import ThoughtTransformer
+        model = ThoughtTransformer(sensory_dim=21)
+        params = model.parameter_count()
+        assert 50000 < params < 1000000, f"Expected <1M params, got {params}"
+
+    def test_transformer_forward_shape(self):
+        """Forward pass should produce correct output shape."""
+        from learned_thinking import ThoughtTransformer
+        model = ThoughtTransformer(sensory_dim=21)
+        sensory = torch.randn(2, 21)  # batch=2
+        chars = torch.randint(0, 29, (2, 16))  # batch=2, seq=16
+        logits = model(sensory, chars)
+        assert logits.shape == (2, 16, 31), f"Got {logits.shape}"
+
+    def test_learned_thinker_record_and_train(self):
+        """LearnedThinker should record experiences and train without error."""
+        from learned_thinking import LearnedThinker
+        thinker = LearnedThinker(sensory_dim=21, device='cpu',
+                                  train_interval=10, batch_size=8)
+        thinker.start()
+        # Record 20 experiences
+        for i in range(20):
+            sensory = torch.randn(21) * 0.5 + 0.5
+            sensory = torch.clamp(sensory, 0, 1)
+            thinker.record_experience(sensory, "cold. dark.")
+        # Should have trained at least once
+        assert thinker.train_steps > 0, "Should have trained"
+        assert thinker.stats['total_experiences'] == 20
+
+    def test_blend_thoughts_low_confidence_uses_rule(self):
+        """At low confidence, blend should use rule-based thought."""
+        from learned_thinking import blend_thoughts
+        result = blend_thoughts("rule thought", "learned thought", confidence=0.1)
+        assert result == "rule thought"
+
+    def test_blend_thoughts_high_confidence_uses_learned(self):
+        """At high confidence with valid learned thought, blend should use it."""
+        from learned_thinking import blend_thoughts
+        import random
+        random.seed(42)
+        # High confidence — should usually use learned
+        uses_learned = 0
+        for _ in range(100):
+            result = blend_thoughts("rule thought", "learned thought", confidence=0.95)
+            if result == "learned thought":
+                uses_learned += 1
+        assert uses_learned > 80, f"Expected >80/100 learned, got {uses_learned}"
+
+
+class TestVocabDivergence:
+    """Test vocabulary divergence logging between Adam and Eve."""
+
+    def test_jaccard_identical_sets(self):
+        """Identical vocabularies should have Jaccard=1.0."""
+        from vocab_divergence import jaccard_similarity
+        assert jaccard_similarity({"a", "b"}, {"a", "b"}) == 1.0
+
+    def test_jaccard_disjoint_sets(self):
+        """Disjoint vocabularies should have Jaccard=0.0."""
+        from vocab_divergence import jaccard_similarity
+        assert jaccard_similarity({"a", "b"}, {"c", "d"}) == 0.0
+
+    def test_jaccard_partial_overlap(self):
+        """Half-overlapping sets should have Jaccard=1/3."""
+        from vocab_divergence import jaccard_similarity
+        # |{a,b}|=2, |{b,c}|=2, |union|=3, |intersection|=1 → 1/3
+        assert abs(jaccard_similarity({"a", "b"}, {"b", "c"}) - 1/3) < 1e-6
+
+    def test_logger_creates_file(self, tmp_path):
+        """Logger should create a JSONL log file."""
+        from vocab_divergence import VocabDivergenceLogger
+        log_path = str(tmp_path / "vocab.jsonl")
+        logger = VocabDivergenceLogger(log_path=log_path, log_interval=10)
+        logger.log(tick=10, adam_vocab=["a", "b"], eve_vocab=["b", "c"])
+        assert os.path.exists(log_path)
+        # File should have one line
+        with open(log_path) as f:
+            lines = f.readlines()
+        assert len(lines) == 1
+        import json
+        entry = json.loads(lines[0])
+        assert entry["tick"] == 10
+        assert entry["adam_vocab_size"] == 2
+        assert entry["shared_count"] == 1
+        assert abs(entry["jaccard"] - 1/3) < 1e-4
+
+    def test_logger_tracks_new_words(self, tmp_path):
+        """Logger should track words added since last log."""
+        from vocab_divergence import VocabDivergenceLogger
+        logger = VocabDivergenceLogger(log_path=str(tmp_path / "v.jsonl"), log_interval=10)
+        # First log
+        logger.log(10, ["a", "b"], ["a", "b"])
+        # Second log with new words
+        entry = logger.log(20, ["a", "b", "c"], ["a", "b", "d"])
+        assert entry["adam_new"] == ["c"]
+        assert entry["eve_new"] == ["d"]
+
+    def test_logger_should_log_interval(self, tmp_path):
+        """should_log should only return True at interval boundaries."""
+        from vocab_divergence import VocabDivergenceLogger
+        logger = VocabDivergenceLogger(log_path=str(tmp_path / "v.jsonl"), log_interval=50)
+        assert not logger.should_log(49)
+        assert logger.should_log(50)
+        assert not logger.should_log(51)
+        assert logger.should_log(100)
+
+
+class TestMultiAgentIntegration:
+    """Test multi-agent infrastructure (without full training loop)."""
+
+    def test_compute_other_presence_far(self):
+        """Agents far apart should have presence=0."""
+        from train_multi_agent import _compute_other_presence
+        presence, direction = _compute_other_presence(0, 0, 10, 10)
+        assert presence == 0.0
+        assert direction == "none"
+
+    def test_compute_other_presence_adjacent(self):
+        """Adjacent agents should have high presence."""
+        from train_multi_agent import _compute_other_presence
+        presence, direction = _compute_other_presence(5, 5, 6, 5)
+        assert presence > 0.5
+        assert direction == "east"
+
+    def test_compute_other_presence_same_tile(self):
+        """Agents on same tile should have direction='here'."""
+        from train_multi_agent import _compute_other_presence
+        presence, direction = _compute_other_presence(5, 5, 5, 5)
+        assert direction == "here"
+        assert presence > 0.7
+
+    def test_agent_runtime_init(self):
+        """AgentRuntime should initialize with separate brains."""
+        from train_multi_agent import AgentRuntime
+        import torch
+        adam = AgentRuntime("Adam", torch.device("cpu"), is_adam=True)
+        eve = AgentRuntime("Eve", torch.device("cpu"), is_adam=False)
+        # Brains should be separate objects
+        assert adam.model is not eve.model
+        # Brain weights should be different (random init)
+        adam_w = next(adam.model.parameters())
+        eve_w = next(eve.model.parameters())
+        assert not torch.equal(adam_w, eve_w)
+
+    def test_multi_agent_short_run(self, tmp_path, monkeypatch):
+        """Run multi-agent loop for 30 ticks — should not crash."""
+        from train_multi_agent import run_multi_agent_life
+        # Change to tmp dir so we don't pollute the repo
+        monkeypatch.chdir(tmp_path)
+        try:
+            run_multi_agent_life(
+                learned_only=False,
+                max_ticks=30,
+                tick_delay=0.0,
+            )
+        except Exception as e:
+            pytest.fail(f"Multi-agent run crashed: {e}")
+        # Should have created life logs
+        assert (tmp_path / "life_log_adam.json").exists()
+        assert (tmp_path / "life_log_eve.json").exists()
+        assert (tmp_path / "vocab_divergence.jsonl").exists()
+
+    def test_multi_agent_vocab_diverges(self, tmp_path, monkeypatch):
+        """Over 100 ticks, Adam and Eve vocabularies should diverge."""
+        from train_multi_agent import run_multi_agent_life
+        import json
+        monkeypatch.chdir(tmp_path)
+        run_multi_agent_life(
+            learned_only=False,
+            max_ticks=100,
+            tick_delay=0.0,
+        )
+        # Read vocab divergence log
+        with open(tmp_path / "vocab_divergence.jsonl") as f:
+            entries = [json.loads(line) for line in f]
+        assert len(entries) >= 1
+        # Final entry should show some divergence (jaccard < 1.0)
+        final = entries[-1]
+        assert final["jaccard"] < 1.0, "Vocab should diverge over 100 ticks"
