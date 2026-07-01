@@ -2628,3 +2628,216 @@ class TestFirstContactEngine:
         summary = fc.get_summary()
         assert summary["first_contact_happened"]
         assert summary["first_contact_tick"] == 100
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Phase 8 — Social Engine (relationships, family, groups, territory, population)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestSocialEngine:
+    """Tests for the Phase 8 social module."""
+
+    def _make_social(self):
+        from social import SocialEngine
+        return SocialEngine(seed=42)
+
+    def test_initial_relationship_is_stranger(self):
+        social = self._make_social()
+        rel = social.get_relationship("adam", "eve")
+        assert rel["relation_type"] == "STRANGER"
+        assert rel["trust"] == 0.0
+
+    def test_sharing_increases_trust(self):
+        social = self._make_social()
+        for _ in range(5):
+            social.update_relationship("adam", "eve", "share", tick=100)
+        rel = social.get_relationship("adam", "eve")
+        assert rel["trust"] > 0
+
+    def test_aggression_decreases_trust(self):
+        social = self._make_social()
+        # Build trust first
+        for _ in range(5):
+            social.update_relationship("adam", "eve", "share", tick=100)
+        trust_before = social.get_relationship("adam", "eve")["trust"]
+        # Aggression
+        social.update_relationship("adam", "eve", "aggression", tick=110)
+        trust_after = social.get_relationship("adam", "eve")["trust"]
+        assert trust_after < trust_before
+
+    def test_steal_food_decreases_trust_more(self):
+        social = self._make_social()
+        social.update_relationship("adam", "eve", "share", tick=100)
+        trust_before = social.get_relationship("adam", "eve")["trust"]
+        social.update_relationship("adam", "eve", "steal_food", tick=110)
+        trust_after = social.get_relationship("adam", "eve")["trust"]
+        assert trust_after < trust_before
+
+    def test_proximity_increases_familiarity(self):
+        social = self._make_social()
+        for _ in range(100):
+            social.update_relationship("adam", "eve", "proximity", tick=100)
+        rel = social.get_relationship("adam", "eve")
+        assert rel["familiarity"] > 0
+
+    def test_family_registration(self):
+        social = self._make_social()
+        social.register_family("baby_1", ["adam", "eve"], birth_tick=100)
+        rel = social.get_relationship("adam", "baby_1")
+        assert rel["relation_type"] == "FAMILY"
+
+    def test_attachment_period_first_200_ticks(self):
+        social = self._make_social()
+        social.register_family("baby_1", ["adam", "eve"], birth_tick=100)
+        assert social.is_in_attachment_period("baby_1", tick=150)
+        assert not social.is_in_attachment_period("baby_1", tick=400)
+
+    def test_parent_survival_reward(self):
+        social = self._make_social()
+        social.register_family("baby_1", ["adam", "eve"], birth_tick=100)
+        reward = social.get_parent_survival_reward("baby_1", tick=200)
+        assert reward["reward"] > 0
+        assert "adam" in reward["parents"]
+
+    def test_group_detection_3_plus_trusted(self):
+        social = self._make_social()
+        # Build trust between 3 agents
+        for _ in range(10):
+            social.update_relationship("adam", "eve", "share", tick=100)
+            social.update_relationship("adam", "carol", "share", tick=100)
+            social.update_relationship("eve", "carol", "share", tick=100)
+        positions = {
+            "adam": (5, 5), "eve": (6, 5), "carol": (7, 5),
+            "dave": (50, 50),  # far away
+        }
+        groups = social.detect_groups(positions, tick=200)
+        assert len(groups) >= 1
+        assert groups[0]["size"] >= 3
+
+    def test_no_group_when_too_far(self):
+        social = self._make_social()
+        for _ in range(10):
+            social.update_relationship("adam", "eve", "share", tick=100)
+        positions = {"adam": (5, 5), "eve": (50, 50)}
+        groups = social.detect_groups(positions, tick=200)
+        assert len(groups) == 0  # only 2 agents, not 3+
+
+    def test_group_warmth_benefit(self):
+        social = self._make_social()
+        positions = {"adam": (5, 5), "eve": (5, 5), "carol": (5, 5)}
+        warmth = social.get_group_warmth_benefit("adam", positions)
+        assert warmth > 0
+
+    def test_no_warmth_benefit_alone(self):
+        social = self._make_social()
+        positions = {"adam": (5, 5), "eve": (10, 10)}
+        warmth = social.get_group_warmth_benefit("adam", positions)
+        assert warmth == 0.0
+
+    def test_territory_claim_and_check(self):
+        social = self._make_social()
+        social.current_tick = 100
+        social.claim_territory("adam", 5, 5, tick=100)
+        assert social.is_territory("adam", 5, 5)
+        assert not social.is_territory("adam", 6, 6)
+
+    def test_territory_fades_after_500_ticks(self):
+        social = self._make_social()
+        social.claim_territory("adam", 5, 5, tick=100)
+        social.current_tick = 700  # 600 > 500
+        assert not social.is_territory("adam", 5, 5)
+
+    def test_intruder_detection(self):
+        social = self._make_social()
+        social.current_tick = 100
+        social.claim_territory("adam", 5, 5, tick=100)
+        result = social.check_intruder("eve", 5, 5)
+        assert result["is_intruder"]
+        assert result["territory_owner"] == "adam"
+        assert result["stress_boost"] > 0
+
+    def test_no_intruder_when_on_own_territory(self):
+        social = self._make_social()
+        social.current_tick = 100
+        social.claim_territory("adam", 5, 5, tick=100)
+        result = social.check_intruder("adam", 5, 5)
+        assert not result["is_intruder"]
+
+    def test_family_can_enter_each_others_territory(self):
+        social = self._make_social()
+        social.current_tick = 100
+        social.register_family("baby", ["adam", "eve"], birth_tick=50)
+        social.claim_territory("adam", 5, 5, tick=100)
+        # Baby should not be flagged as intruder
+        result = social.check_intruder("baby", 5, 5)
+        assert not result["is_intruder"]
+
+    def test_population_underpopulated(self):
+        social = self._make_social()
+        signals = social.update_population(tick=100, num_agents=2)
+        assert signals["underpopulated"]
+        assert signals["reproduction_incentive"] > 0
+
+    def test_population_overpopulated(self):
+        social = self._make_social()
+        signals = social.update_population(tick=100, num_agents=15)
+        assert signals["overpopulated"]
+        assert signals["resource_competition"] > 0
+
+    def test_population_normal(self):
+        social = self._make_social()
+        signals = social.update_population(tick=100, num_agents=5)
+        assert not signals["underpopulated"]
+        assert not signals["overpopulated"]
+
+    def test_disease_infection_tracking(self):
+        social = self._make_social()
+        social.infect_agent("adam")
+        assert social.is_infected("adam")
+        social.cure_agent("adam")
+        assert not social.is_infected("adam")
+
+    def test_disease_spread_returns_list(self):
+        social = self._make_social()
+        social.infect_agent("adam")
+        positions = {"adam": (5, 5), "eve": (5, 6)}  # adjacent
+        # Run many times to potentially trigger spread
+        for _ in range(100):
+            infections = social.spread_disease(positions, tick=100)
+            if infections:
+                break
+        # Either eve got infected or not (probabilistic), but should return list
+        assert isinstance(infections, list)
+
+    def test_step_returns_active_groups(self):
+        social = self._make_social()
+        result = social.step(tick=100, agent_positions={"adam": (5, 5), "eve": (5, 5)})
+        assert "active_groups" in result
+        assert "current_tick" in result
+
+    def test_summary(self):
+        social = self._make_social()
+        social.register_family("baby", ["adam", "eve"], birth_tick=100)
+        social.update_population(tick=100, num_agents=3)
+        summary = social.get_summary()
+        assert "total_relationships" in summary
+        assert "family_members" in summary
+        assert summary["family_members"] == 1
+
+    def test_relation_type_progression(self):
+        """Relation type should progress: STRANGER → FAMILIAR → TRUSTED."""
+        social = self._make_social()
+        rel = social.get_relationship("adam", "eve")
+        assert rel["relation_type"] == "STRANGER"
+
+        # Build familiarity
+        for _ in range(50):
+            social.update_relationship("adam", "eve", "proximity", tick=100)
+        rel = social.get_relationship("adam", "eve")
+        assert rel["relation_type"] in ("FAMILIAR", "TRUSTED")
+
+        # Build trust (5 shares = 0.5 trust = TRUSTED, not MATE)
+        for _ in range(5):
+            social.update_relationship("adam", "eve", "share", tick=200)
+        rel = social.get_relationship("adam", "eve")
+        assert rel["relation_type"] == "TRUSTED"
